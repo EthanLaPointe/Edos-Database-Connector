@@ -1,7 +1,7 @@
 import psycopg2
 
-from src.ReportStandardizer import ReportStandardizer
-from src.DBConnection import DBConnector
+from ReportStandardizer import ReportStandardizer
+from DBConnection import DBConnector
 import pandas as pd
 import glob
 
