@@ -1,10 +1,8 @@
 import psycopg2
 
-from ReportStandardizer import ReportStandardizer
-from DBConnection import DBConnector
-from pathlib import Path
+from src.ReportStandardizer import ReportStandardizer
+from src.DBConnection import DBConnector
 import pandas as pd
-import os
 import glob
 
 pd.set_option('display.max_columns', None)
