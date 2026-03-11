@@ -42,17 +42,17 @@ def get_user_credentials():
 
 print("Connecting to database...")
 
-if not connector.check_credentials():
-        get_user_credentials()
+#if not connector.check_credentials():
+#        get_user_credentials()
 
-while connectionStatus == 0:
-    try:
-        connector.direct_connect()
-        conn = connector.conn
-        connectionStatus = conn.status
-    except psycopg2.Error as e:
-        print("Connection to database failed. Please reenter credentials")
-        #get_user_credentials()
+#while connectionStatus == 0:
+try:
+    connector.direct_connect()
+    conn = connector.conn
+    connectionStatus = conn.status
+except psycopg2.Error as e:
+    print("Connection to database failed. Please reenter credentials")
+    #get_user_credentials()
 
 print("Connection to database successful")
 
