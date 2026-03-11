@@ -4,8 +4,6 @@ import numpy as np
 from pathlib import Path
 import re
 
-import psycopg2.sql
-
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 pd.set_option('display.width', None)

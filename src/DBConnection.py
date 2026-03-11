@@ -39,3 +39,13 @@ class DBConnector:
         with open('credentials.json', 'r') as f:
             credentials = json.load(f)
         return credentials
+
+    def direct_connect(self):
+        #fill with credentials manually
+        self.conn = psycopg2.connect(
+            database="",
+            user="",
+            password="",
+            host="",
+            port=""
+        )

@@ -47,12 +47,12 @@ if not connector.check_credentials():
 
 while connectionStatus == 0:
     try:
-        connector.connect()
+        connector.direct_connect()
         conn = connector.conn
         connectionStatus = conn.status
     except psycopg2.Error as e:
         print("Connection to database failed. Please reenter credentials")
-        get_user_credentials()
+        #get_user_credentials()
 
 print("Connection to database successful")
 
@@ -131,6 +131,7 @@ def insert_report(report_path):
         report_id = cursor.fetchone()[0]
     except psycopg2.Error as insert_exception:
         print("Failed to insert sales report. Error: ", insert_exception)
+        conn.rollback()
         return
 
     for row in range(len(df.index)):
