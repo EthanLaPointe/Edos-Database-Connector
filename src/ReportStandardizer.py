@@ -70,11 +70,10 @@ class ReportStandardizer:
         #Update column names to match field list
         trimmed_df.columns = self.fieldList
         #Change instances of nan to proper datatypes in each col
-        trimmed_df["quantity"] = trimmed_df["quantity"].fillna(0).astype(int)
+        trimmed_df["quantity"] = trimmed_df["quantity"].fillna(0).astype(float).astype(int)
         trimmed_df["saledate"] = trimmed_df["saledate"].fillna(None)
         #Remove any $ from amount column
-        trimmed_df["amount"] = trimmed_df["amount"].fillna(0.0)
-        trimmed_df["amount"] = trimmed_df["amount"].str.replace('[$,()]', '', regex=True).astype(float)
+        trimmed_df["amount"] = (trimmed_df["amount"].fillna(0.0).astype(str).str.replace('[$,(),-]', '', regex=True).astype(float))
         #Fill any leftover empty cells with None
         trimmed_df = trimmed_df.replace({np.nan: None})
 
