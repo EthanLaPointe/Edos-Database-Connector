@@ -17,7 +17,7 @@ class ReportStandardizer:
     month = ""
     year = ""
 
-    fieldList = ["customername", "city", "state", "stockcode", "itemfamily", "itemdesc", "quantity", "saledate", "amount", "transfer"]
+    fieldList = ["customername", "city", "state", "stockcode", "productfam", "productdesc", "quantity", "saledate", "amount", "transfer"]
 
     def set_report_path(self, report_path):
         self.reportPath = Path(report_path)
@@ -48,6 +48,7 @@ class ReportStandardizer:
 
         #Trim DF to only contain desired columns
         trimmed_df = self.df.iloc[:, fields_to_keep]
+        #print(trimmed_df.head(20))
         return trimmed_df
 
     def fill_empty(self, trimmed_df):
@@ -73,10 +74,19 @@ class ReportStandardizer:
         trimmed_df["quantity"] = trimmed_df["quantity"].fillna(0).astype(float).astype(int)
         trimmed_df["saledate"] = trimmed_df["saledate"].fillna(None)
         #Remove any $ from amount column
-        trimmed_df["amount"] = (trimmed_df["amount"].fillna(0.0).astype(str).str.replace('[$,(),-]', '', regex=True).astype(float))
+        trimmed_df["amount"] = trimmed_df["amount"].astype(str).str.replace(r'[$,()#-]', '', regex=True).str.strip().replace('', '0.0')
+        trimmed_df["amount"] = trimmed_df["amount"].fillna(0.0).astype(str).astype(float)
+        #Remove special characters from customer name
+        trimmed_df["customername"] = trimmed_df["customername"].astype(str).str.replace(r"[.']", '', regex=True)
         #Fill any leftover empty cells with None
         trimmed_df = trimmed_df.replace({np.nan: None})
 
+        #Remove any rows where amount is 0
+        for idx, value in enumerate(trimmed_df["amount"]):
+            if value == 0.0:
+                trimmed_df.drop(idx, inplace=True)
+
+        #print(trimmed_df.head(20))
         return trimmed_df
 
     def standardize(self, report_path):
