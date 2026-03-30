@@ -17,13 +17,13 @@ queryDict = {"manufacturerInsert": """insert into manufacturers(manufacturer_nam
              "locationInsert": """insert into locations(city, state) values (%s, %s) returning location_id;""",
              "customerLocationInsert": """insert into customer_locations(customer_id, location_id) values (%s, %s);""",
              "saleCustomerInsert": """insert into sale_customer(report_id, customer_id, location_id) values (%s, %s, %s);""",
-             "itemInsert": """insert into item(item_name, item_family, item_description) values (%s, %s, %s) returning item_id;""",
+             "itemInsert": """insert into item(stockcode, product_family, product_description) values (%s, %s, %s) returning item_id;""",
              "reportLineInsert": """insert into report_line(report_id, customer_id, item_id, location_id, amt, sale_date, quantity, transfer) values (%s, %s, %s, %s, %s, %s, %s, %s);""",
              "checkCustomer": """select c.customer_name from customers c where c.customer_name = %s;""",
              "checkLocation" : """select l.city, l.state from locations l where l.city = %s and l.state = %s;""",
              "checkCustomerLocation": """select cl.customer_id, cl.location_id from customer_locations cl where cl.customer_id = %s and cl.location_id = %s;""",
              "checkSaleCustomer": """select sc.customer_id, sc.report_id, sc.location_id from sale_customer sc where sc.customer_id = %s and sc.report_id = %s and sc.location_id = %s;""",
-             "checkItem": """select i.item_name from item i where i.item_name = %s;"""}
+             "checkItem": """select i.stockcode from item i where i.stockcode = %s;"""}
 
 def get_user_credentials():
     credentials = []
@@ -47,7 +47,7 @@ print("Connecting to database...")
 try:
     #while connectionStatus == 0:
     try:
-        connector.direct_connect()
+        connector.connect()
         conn = connector.conn
         connectionStatus = conn.status
     except psycopg2.Error as e:
@@ -100,7 +100,7 @@ try:
         cursor = conn.cursor()
         id_query = """select i.item_id
                      from item i
-                     where i.item_name = %s;"""
+                     where i.stockcode = %s;"""
         cursor.execute(id_query, (item_name,))
         if cursor.rowcount != 0:
             return cursor.fetchone()[0]
@@ -113,7 +113,9 @@ try:
         df = standardizer.standardize(report_path)
 
         manufacturer_name = standardizer.get_manufacturer_name()
-        line_data = {"customer": '', "city": '', "state": '', "stockcode": '', "itemfamily": '', "itemdesc": '', "quantity": 0,"saledate": None, "amount": 0.0, "transfer": ''}
+        #dict to store current line information
+        line_data = {"customer": '', "city": '', "state": '', "stockcode": '', "productfamily": '', "productdesc": '', "quantity": 0,"saledate": None, "amount": 0.0, "transfer": ''}
+
         report_month = standardizer.get_report_month()
         report_year = standardizer.get_report_year()
         inserted_customers = {}
@@ -137,6 +139,7 @@ try:
         for row in range(len(df.index)):
             #print("row:", row)
             #print(line_data)
+            #fill line_data dict with information from current row
             line_data["customer"] = df.iloc[row, 0]
             if line_data["customer"]:
                 line_data["customer"] = line_data["customer"].lower()
@@ -147,8 +150,8 @@ try:
             if line_data["state"]:
                 line_data["state"] = line_data["state"].lower()
             line_data["stockcode"] = df.iloc[row, 3]
-            line_data["itemfamily"] = df.iloc[row, 4]
-            line_data["itemdesc"] = df.iloc[row, 5]
+            line_data["productfamily"] = df.iloc[row, 4]
+            line_data["productdesc"] = df.iloc[row, 5]
             line_data["quantity"] = df.iloc[row, 6]
             line_data["saledate"] = df.iloc[row, 7]
             line_data["amount"] = df.iloc[row, 8]
@@ -186,7 +189,7 @@ try:
             if line_data["stockcode"] not in inserted_items:
                 item_id = get_item_id(line_data["stockcode"])
                 if not item_id:
-                    cursor.execute(queryDict["itemInsert"], (line_data["stockcode"], line_data["itemfamily"], line_data["itemdesc"]))
+                    cursor.execute(queryDict["itemInsert"], (line_data["stockcode"], line_data["productfamily"], line_data["productdesc"]))
                     item_id = cursor.fetchone()[0]
                     inserted_items[line_data["stockcode"]] = item_id
             else:
@@ -228,6 +231,16 @@ try:
 
         if choice == 3:
             print("Exiting program...")
+
+        if choice == 4:
+            print("Enter file path of report:")
+            reportPath = (input().replace('\\', '/'))
+            if reportPath[0] == '"':
+                reportPath = reportPath[1:-1]
+            standardizer = ReportStandardizer()
+            df = standardizer.standardize(reportPath)
+            print("Standardized report:\n")
+            print(df.head(100))
 except Exception as e:
     print("Error: ", e)
 input()
@@ -242,7 +255,7 @@ def select_report_by_id(_id):
                     c.customer_name,
                     l.city,
                     l.state,
-                    i.item_name,
+                    i.stockcode,
                     rl.amt,
                     rl.quantity,
                     rl.transfer
