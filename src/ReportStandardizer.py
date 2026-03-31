@@ -17,7 +17,7 @@ class ReportStandardizer:
     month = ""
     year = ""
 
-    fieldList = ["customername", "city", "state", "stockcode", "productfam", "productdesc", "quantity", "saledate", "amount", "transfer"]
+    fieldList = ["customername", "city", "state", "stockcode", "productfam", "productdesc", "quantity", "date", "amount", "transfer"]
 
     def set_report_path(self, report_path):
         self.reportPath = Path(report_path)
