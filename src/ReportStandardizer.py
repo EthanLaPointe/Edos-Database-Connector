@@ -72,7 +72,7 @@ class ReportStandardizer:
         trimmed_df.columns = self.fieldList
         #Change instances of nan to proper datatypes in each col
         trimmed_df["quantity"] = trimmed_df["quantity"].fillna(0).astype(float).astype(int)
-        trimmed_df["saledate"] = trimmed_df["saledate"].fillna(None)
+        trimmed_df["date"] = trimmed_df["date"].fillna(None)
         #Remove any $ from amount column
         trimmed_df["amount"] = trimmed_df["amount"].astype(str).str.replace(r'[$,()#-]', '', regex=True).str.strip().replace('', '0.0')
         trimmed_df["amount"] = trimmed_df["amount"].fillna(0.0).astype(str).astype(float)
