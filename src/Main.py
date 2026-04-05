@@ -4,6 +4,7 @@ from ReportStandardizer import ReportStandardizer
 from DBConnection import DBConnector
 import pandas as pd
 import glob
+import traceback
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
@@ -113,8 +114,9 @@ try:
         df = standardizer.standardize(report_path)
 
         manufacturer_name = standardizer.get_manufacturer_name()
-        #dict to store current line information
-        line_data = {"customer": '', "city": '', "state": '', "stockcode": '', "productfamily": '', "productdesc": '', "quantity": 0,"saledate": None, "amount": 0.0, "transfer": ''}
+        #dict to store row information
+        #column index for row matches line_data, i.e. line_data["customer"] = row[0]
+        line_data = {"customername": '', "city": '', "state": '', "stockcode": '', "productfamily": '', "productdesc": '',"quantity": 0, "saledate": None, "amount": 0.0, "transfer": ''}
 
         report_month = standardizer.get_report_month()
         report_year = standardizer.get_report_year()
@@ -136,36 +138,36 @@ try:
             conn.rollback()
             return
 
-        for row in range(len(df.index)):
-            #print("row:", row)
-            #print(line_data)
+        for row in df.itertuples(index=False):
             #fill line_data dict with information from current row
-            line_data["customer"] = df.iloc[row, 0]
-            if line_data["customer"]:
-                line_data["customer"] = line_data["customer"].lower()
-            line_data["city"] = df.iloc[row, 1]
+            line_data["customername"] = row[0]
+            if line_data["customername"]:
+                line_data["customername"] = line_data["customername"].lower()
+            line_data["city"] = row[1]
             if line_data["city"]:
                 line_data["city"] = line_data["city"].lower()
-            line_data["state"] = df.iloc[row, 2]
+            line_data["state"] = row[2]
             if line_data["state"]:
                 line_data["state"] = line_data["state"].lower()
-            line_data["stockcode"] = df.iloc[row, 3]
-            line_data["productfamily"] = df.iloc[row, 4]
-            line_data["productdesc"] = df.iloc[row, 5]
-            line_data["quantity"] = df.iloc[row, 6]
-            line_data["saledate"] = df.iloc[row, 7]
-            line_data["amount"] = df.iloc[row, 8]
-            line_data["transfer"] = df.iloc[row, 9]
+            line_data["stockcode"] = row[3]
+            line_data["productfamily"] = row[4]
+            line_data["productdesc"] = row[5]
+            line_data["quantity"] = row[6]
+            line_data["saledate"] = row[7]
+            line_data["amount"] = row[8]
+            if line_data["amount"] >= 0 and line_data["quantity"] == 0:
+                line_data["quantity"] = None
+            line_data["transfer"] = row[9]
 
             #insert customer
-            if line_data["customer"] not in inserted_customers:
-                customer_id = get_customer_id(line_data["customer"])
+            if line_data["customername"] not in inserted_customers:
+                customer_id = get_customer_id(line_data["customername"])
                 if not customer_id:
-                    cursor.execute(queryDict["customerInsert"], (line_data["customer"],))
+                    cursor.execute(queryDict["customerInsert"], (line_data["customername"],))
                     customer_id = cursor.fetchone()[0]
-                    inserted_customers[line_data["customer"]] = customer_id
+                    inserted_customers[line_data["customername"]] = customer_id
             else:
-                customer_id = inserted_customers[line_data["customer"]]
+                customer_id = inserted_customers[line_data["customername"]]
             #insert location
             if (line_data["city"], line_data["state"]) not in inserted_locations:
                 location_id = get_location_id(line_data["city"], line_data["state"])
@@ -195,7 +197,7 @@ try:
             else:
                 item_id = inserted_items[line_data["stockcode"]]
             #insert report_line
-            cursor.execute(queryDict["reportLineInsert"], (report_id, customer_id, item_id, location_id, float(line_data["amount"]), line_data["saledate"], int(line_data["quantity"]), line_data["transfer"]))
+            cursor.execute(queryDict["reportLineInsert"], (report_id, customer_id, item_id, location_id, float(line_data["amount"]), line_data["saledate"], line_data["quantity"], line_data["transfer"]))
 
         conn.commit()
 
@@ -242,8 +244,8 @@ try:
             print("Standardized report:\n")
             print(df.head(100))
 except Exception as e:
-    print("Error: ", e)
-input()
+    traceback.print_exc()
+    input()
 
 def select_report_by_id(_id):
     report_id = _id
