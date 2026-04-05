@@ -21,7 +21,7 @@ class ReportStandardizer:
 
     def set_report_path(self, report_path):
         self.reportPath = Path(report_path)
-        self.df = pd.read_csv(self.reportPath).astype(str)
+        self.df = pd.read_csv(self.reportPath, encoding='latin-1').astype(str)
         self.reportName = self.reportPath.name
         self.manufacturerName = self.reportName.split()[0]
 
@@ -72,19 +72,18 @@ class ReportStandardizer:
         trimmed_df.columns = self.fieldList
         #Change instances of nan to proper datatypes in each col
         trimmed_df["quantity"] = trimmed_df["quantity"].fillna(0).astype(float).astype(int)
+        #trimmed_df["quantity"] = np.where((trimmed_df["quantity"] == np.nan) & trimmed_df["amount"] <= 0, 0, trimmed_df["quantity"])
         trimmed_df["date"] = trimmed_df["date"].fillna(None)
         #Remove any $ from amount column
-        trimmed_df["amount"] = trimmed_df["amount"].astype(str).str.replace(r'[$,()#-]', '', regex=True).str.strip().replace('', '0.0')
-        trimmed_df["amount"] = trimmed_df["amount"].fillna(0.0).astype(str).astype(float)
+        trimmed_df["amount"] = trimmed_df["amount"].astype(str).str.replace(r'[$,)#]', '', regex=True).str.strip().replace('', '0.0').replace(r'[-(]', '-0', regex=True).fillna(0.0).astype(float)
+        #trimmed_df["amount"] = trimmed_df["amount"].fillna(0.0).astype(str).astype(float)
         #Remove special characters from customer name
         trimmed_df["customername"] = trimmed_df["customername"].astype(str).str.replace(r"[.']", '', regex=True)
         #Fill any leftover empty cells with None
         trimmed_df = trimmed_df.replace({np.nan: None})
-
-        #Remove any rows where amount is 0
-        for idx, value in enumerate(trimmed_df["amount"]):
-            if value == 0.0:
-                trimmed_df.drop(idx, inplace=True)
+        #Remove any rows where amount is 0 & set quantity to null if it = 0 where amount is > 0
+        trimmed_df = trimmed_df[trimmed_df["amount"] != 0.0]
+        trimmed_df["quantity"] = np.where((trimmed_df["amount"] > 0) & (trimmed_df["quantity"] == 0), None, trimmed_df["quantity"])
 
         #print(trimmed_df.head(20))
         return trimmed_df
