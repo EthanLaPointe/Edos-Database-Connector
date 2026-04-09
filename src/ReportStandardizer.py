@@ -48,6 +48,7 @@ class ReportStandardizer:
                 dataframe.insert(loc=header_locations[-1] + 1, column=field, value=np.nan)
         #Update column names to match field list
         dataframe.columns = self.fieldList
+        dataframe = dataframe.map(lambda s: s.lower() if isinstance(s, str) else s)
         #Change instances of nan to proper datatypes in each col
         dataframe["quantity"] = dataframe["quantity"].fillna(0).astype(float).astype(int)
         #trimmed_df["quantity"] = np.where((trimmed_df["quantity"] == np.nan) & trimmed_df["amount"] <= 0, 0, trimmed_df["quantity"])
@@ -55,7 +56,7 @@ class ReportStandardizer:
         #Remove any $ from amount column
         dataframe["amount"] = dataframe["amount"].astype(str).str.replace(r'[$,)#]', '', regex=True).str.strip().replace('', '0.0').replace(r'[-(]', '-0', regex=True).fillna(0.0).astype(float)
         #Remove special characters from customer name
-        dataframe["customername"] = dataframe["customername"].astype(str).str.replace(r"[.']", '', regex=True)
+        dataframe["customername"] = dataframe["customername"].astype(str).str.replace(r"[.'(),-]", '', regex=True).str.replace("  ", " ")
         #Fill any leftover empty cells with None
         dataframe = dataframe.replace({np.nan: None})
         #Remove any rows where amount is 0 & set quantity to null if it = 0 where amount is > 0
@@ -63,6 +64,10 @@ class ReportStandardizer:
         dataframe["quantity"] = np.where((dataframe["amount"] > 0) & (dataframe["quantity"] == 0), None, dataframe["quantity"])
 
         return dataframe
+
+    def replace_alias(self, dataframe, alias_list, customer_list):
+        print()
+
 
     def standardize(self, report_path):
         standardized_report = Report()

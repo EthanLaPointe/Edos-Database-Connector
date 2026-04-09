@@ -1,7 +1,16 @@
 import psycopg2
 import json
 import os
+from functools import reduce
 from ReportStandardizer import ReportStandardizer
+
+
+def tuple_to_nested(data):
+    def insert(d, item):
+        *keys, value = item
+        reduce(lambda d, k: d.setdefault(k, {}), keys[:-1], d)[keys[-1]] = value
+        return d
+    return reduce(insert, map(tuple, data), {})
 
 class DBConnector:
 
@@ -20,6 +29,10 @@ class DBConnector:
                  "checkCustomerLocation": """select cl.customer_id, cl.location_id from customer_locations cl where cl.customer_id = %s and cl.location_id = %s;""",
                  "checkSaleCustomer": """select sc.customer_id, sc.report_id, sc.location_id from sale_customer sc where sc.customer_id = %s and sc.report_id = %s and sc.location_id = %s;""",
                  "checkItem": """select i.stockcode from item i where i.stockcode = %s;"""}
+        self.customer_list = None
+        self.alias_list = None
+        self.location_list = None
+        self.item_list = None
 
     def connect(self):
         if self.check_credentials():
@@ -43,6 +56,12 @@ class DBConnector:
             host="",
             port=""
         )
+
+    def retrieve_lists(self):
+        self.customer_list = self.get_customer_list()
+        self.alias_list = self.get_customer_alias_list()
+        self.item_list = self.get_item_list()
+        self.location_list = self.get_location_list()
 
     @staticmethod
     def set_credentials(database_name, username, password, host, port):
@@ -68,13 +87,41 @@ class DBConnector:
             credentials = json.load(f)
         return credentials
 
-    def get_customer_list(self):
+    def get_customer_alias_list(self):
         cursor = self.conn.cursor()
-        query = """select customer_name, customer_id from customers;"""
+        query = """select ca.alias, c.customer_id from customers c join customer_alias ca on ca.customer_id = c.customer_id;"""
         cursor.execute(query)
         if cursor.rowcount != 0:
-            return cursor.fetchall()
+            data = cursor.fetchall()
+            return dict(map(lambda x: ((x[0], x[1]), x[2]), data))
         return None
+
+    def get_customer_list(self):
+        cursor = self.conn.cursor()
+        query = """select c.customer_name, c.customer_id from customers c;"""
+        cursor.execute(query)
+        if cursor.rowcount != 0:
+            data = cursor.fetchall()
+            return dict(map(lambda x: ((x[0], x[1]), x[2]), data))
+        return {}
+
+    def get_item_list(self):
+        cursor = self.conn.cursor()
+        query = """select i.stockcode, i.item_id from item i;"""
+        cursor.execute(query)
+        if cursor.rowcount != 0:
+            data = cursor.fetchall()
+            return dict(map(lambda x: ((x[0], x[1]), x[2]), data))
+        return {}
+
+    def get_location_list(self):
+        cursor = self.conn.cursor()
+        query = """select l.city, l.state, l.location_id from locations l;"""
+        cursor.execute(query)
+        if cursor.rowcount != 0:
+            data = cursor.fetchall()
+            return dict(map(lambda x: ((x[0], x[1]), x[2]), data))
+        return {}
 
     def get_manufacturer_id(self, manufacturer_name):
         cursor = self.conn.cursor()
@@ -84,7 +131,7 @@ class DBConnector:
         cursor.execute(id_query, (manufacturer_name,))
         if cursor.rowcount != 0:
             return cursor.fetchone()[0]
-        return None
+        return {}
 
     def get_location_id(self, city, state):
         cursor = self.conn.cursor()
@@ -133,10 +180,6 @@ class DBConnector:
         #column index for row matches line_data, i.e. line_data["customer"] = row[0]
         line_data = {"customername": '', "city": '', "state": '', "stockcode": '', "productfamily": '', "productdesc": '',"quantity": 0, "saledate": None, "amount": 0.0, "transfer": ''}
 
-        inserted_customers = {}
-        inserted_items = {}
-        inserted_locations = {}
-
         #insert manufacturer name and check if present already
         manufacturer_id = self.get_manufacturer_id(report.manufacturerName)
         if not manufacturer_id:
@@ -154,14 +197,8 @@ class DBConnector:
         for row in report.dataframe.itertuples(index=False):
             #fill line_data dict with information from current row
             line_data["customername"] = row[0]
-            if line_data["customername"]:
-                line_data["customername"] = line_data["customername"].lower()
             line_data["city"] = row[1]
-            if line_data["city"]:
-                line_data["city"] = line_data["city"].lower()
             line_data["state"] = row[2]
-            if line_data["state"]:
-                line_data["state"] = line_data["state"].lower()
             line_data["stockcode"] = row[3]
             line_data["productfamily"] = row[4]
             line_data["productdesc"] = row[5]
@@ -173,23 +210,23 @@ class DBConnector:
             line_data["transfer"] = row[9]
 
             #insert customer
-            if line_data["customername"] not in inserted_customers:
+            if line_data["customername"] not in self.customer_list:
                 customer_id = self.get_customer_id(line_data["customername"])
                 if not customer_id:
                     cursor.execute(self.queryDict["customerInsert"], (line_data["customername"],))
                     customer_id = cursor.fetchone()[0]
-                    inserted_customers[line_data["customername"]] = customer_id
+                    self.customer_list[line_data["customername"]] = customer_id
             else:
-                customer_id = inserted_customers[line_data["customername"]]
+                customer_id = self.customer_list[line_data["customername"]]
             #insert location
-            if (line_data["city"], line_data["state"]) not in inserted_locations:
+            if (line_data["city"], line_data["state"]) not in self.location_list:
                 location_id = self.get_location_id(line_data["city"], line_data["state"])
                 if not location_id:
                     cursor.execute(self.queryDict["locationInsert"], (line_data["city"], line_data["state"]))
                     location_id = cursor.fetchone()[0]
-                    inserted_locations[(line_data["city"], line_data["state"])] = location_id
+                    self.location_list[(line_data["city"], line_data["state"])] = location_id
             else:
-                location_id = inserted_locations[(line_data["city"], line_data["state"])]
+                location_id = self.location_list[(line_data["city"], line_data["state"])]
             #insert customer location
             cursor.execute(self.queryDict["checkCustomerLocation"], (customer_id, location_id))
             rows = cursor.fetchall()
@@ -201,14 +238,14 @@ class DBConnector:
             if not rows:
                 cursor.execute(self.queryDict["saleCustomerInsert"], (report_id, customer_id, location_id))
             #insert item
-            if line_data["stockcode"] not in inserted_items:
+            if line_data["stockcode"] not in self.item_list:
                 item_id = self.get_item_id(line_data["stockcode"])
                 if not item_id:
                     cursor.execute(self.queryDict["itemInsert"], (line_data["stockcode"], line_data["productfamily"], line_data["productdesc"]))
                     item_id = cursor.fetchone()[0]
-                    inserted_items[line_data["stockcode"]] = item_id
+                    self.item_list[line_data["stockcode"]] = item_id
             else:
-                item_id = inserted_items[line_data["stockcode"]]
+                item_id = self.item_list[line_data["stockcode"]]
             #insert report_line
             cursor.execute(self.queryDict["reportLineInsert"], (report_id, customer_id, item_id, location_id, float(line_data["amount"]), line_data["saledate"], line_data["quantity"], line_data["transfer"]))
 
@@ -218,15 +255,15 @@ class DBConnector:
     def select_report_by_id(self, _id):
         report_id = _id
         cursor = self.conn.cursor()
-        query = """select m.manufacturer_name, \
-                          sr.report_year, \
-                          sr.report_month, \
-                          c.customer_name, \
-                          l.city, \
-                          l.state, \
-                          i.stockcode, \
-                          rl.amt, \
-                          rl.quantity, \
+        query = """select m.manufacturer_name,
+                          sr.report_year,
+                          sr.report_month,
+                          c.customer_name,
+                          l.city,
+                          l.state,
+                          i.stockcode,
+                          rl.amt,x
+                          rl.quantity,
                           rl.transfer
                    from report_line rl
     
@@ -247,8 +284,8 @@ class DBConnector:
     
                    where rl.report_id = %s
     
-                   order by c.customer_name, \
-                            l.city, \
+                   order by c.customer_name,
+                            l.city,
                             i.item_name;"""
 
         cursor.execute(query, (report_id,))
