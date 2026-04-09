@@ -60,6 +60,7 @@ try:
             if conn_failed_choice == 2:
                 sys.exit()
     print("Connection to database successful")
+    connector.retrieve_lists()
 
     choice = 0
 
@@ -102,13 +103,23 @@ try:
             reportPath = (input().replace('\\', '/'))
             if reportPath[0] == '"':
                 reportPath = reportPath[1:-1]
-            report = ReportStandardizer.standardize(reportPath)
+            report = ReportStandardizer().standardize(reportPath)
             print("Standardized report:\n")
-            print(report.dataframe.head(100))
+            print(report.dataframe)
 
         if choice == 5:
-            customerList = connector.get_customer_list()
-            print(customerList)
+            aliasList = (connector.get_customer_alias_list())
+            print(aliasList)
+
+            testvalue = 'winnelson'
+            if testvalue in aliasList.keys():
+                print(aliasList[testvalue])
+            else:
+                print(testvalue + " not found")
+
+        if choice ==6:
+            connector.retrieve_lists()
+            print(connector.location_list)
 
 except Exception as e:
     traceback.print_exc()
