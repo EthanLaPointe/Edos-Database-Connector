@@ -2,7 +2,7 @@ import psycopg2
 
 from ReportStandardizer import ReportStandardizer
 from Report import Report
-from DBConnection import DBConnector
+from DBConnection import *
 import pandas as pd
 import glob
 import traceback
@@ -11,6 +11,10 @@ import sys
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 pd.set_option('display.width', None)
+
+def print_report(rld: ReportLineDAO, _id: int):
+    for line in rld.stream_by_report(report_id=4):
+        print(line)
 
 connector = DBConnector()
 connectionStatus = 0
@@ -60,8 +64,8 @@ try:
             if conn_failed_choice == 2:
                 sys.exit()
     print("Connection to database successful")
-    connector.retrieve_lists()
-
+    #connector.populate_lists()
+    customerDAO = CustomerDAO(connector)
     choice = 0
 
     while choice != 3:
@@ -117,9 +121,17 @@ try:
             else:
                 print(testvalue + " not found")
 
-        if choice ==6:
+        if choice == 6:
             connector.retrieve_lists()
             print(connector.location_list)
+
+        if choice == 7:
+            rld = ReportLineDAO(connector)
+            print_report(rld, "4")
+
+
+        if choice == 8:
+            print("Enter id to delete")
 
 except Exception as e:
     traceback.print_exc()
