@@ -1,6 +1,7 @@
 import psycopg2
+from pip._internal.resolution.resolvelib.factory import Factory
 
-from ReportStandardizer import ReportStandardizer
+from ReportHandler import ReportHandler
 from Report import Report
 from DBConnection import *
 import pandas as pd
@@ -65,7 +66,8 @@ try:
                 sys.exit()
     print("Connection to database successful")
     #connector.populate_lists()
-    customerDAO = CustomerDAO(connector)
+    factory = DAOFactory(connector)
+    handler = ReportHandler(connector, factory)
     choice = 0
 
     while choice != 3:
@@ -80,9 +82,20 @@ try:
             reportPath = (input().replace('\\', '/'))
             if reportPath[0] == '"':
                 reportPath = reportPath[1:-1]
-            print("Inserting: " + reportPath + "...")
-            report = ReportStandardizer().standardize(reportPath)
-            connector.insert_report(report)
+            print("Standardizing: " + reportPath + "...")
+            report = handler.standardize(reportPath)
+            print("Checking:" + reportPath + "...")
+            valid = handler.check_report(report)
+            if valid[0] and len(valid[1]) == 0:
+                print("Inserting: " + reportPath + "...")
+                handler.insert_report(report)
+            elif valid[0] and len(valid[1]) > 0:
+                print("Unknown customers found")
+                print(valid[1])
+            else:
+                print("Report already exists for", report.manufacturerName, " during the period", report.month, ",", report.year)
+
+
 
         if choice == 2:
             print("Enter path to the folder:")
@@ -96,8 +109,8 @@ try:
 
             for csv_file in csvList:
                 print("Inserting: " + csv_file + "...")
-                report = ReportStandardizer().standardize(csv_file.replace('\\', '/'))
-                connector.insert_report(report)
+                report = handler.standardize(csv_file.replace('\\', '/'))
+                handler.insert_report(report)
 
         if choice == 3:
             print("Exiting program...")
@@ -107,7 +120,7 @@ try:
             reportPath = (input().replace('\\', '/'))
             if reportPath[0] == '"':
                 reportPath = reportPath[1:-1]
-            report = ReportStandardizer().standardize(reportPath)
+            report = handler.standardize(reportPath)
             print("Standardized report:\n")
             print(report.dataframe)
 
@@ -122,16 +135,28 @@ try:
                 print(testvalue + " not found")
 
         if choice == 6:
-            connector.retrieve_lists()
-            print(connector.location_list)
+            testlist = {1: "fw webb", 2: "winnelson"}
+            if "fw webb" in testlist.values():
+                print(testlist["fw webb"])
 
         if choice == 7:
             rld = ReportLineDAO(connector)
-            print_report(rld, "4")
-
+            info = rld.get_all()
+            print(info)
 
         if choice == 8:
-            print("Enter id to delete")
+            itemDAO = ItemDAO(connector)
+            items = itemDAO.get_all()
+            print(len(items))
+
+        if choice == 9:
+            cd = CustomerDAO(connector)
+            customers = cd.get_all_as_dict()
+            print(customers)
+
+        if choice == 10:
+            testtuple = (True, ["egg"])
+            print(testtuple[1])
 
 except Exception as e:
     traceback.print_exc()

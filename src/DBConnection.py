@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
-from typing import Optional, Iterator, TypeVar, Generic, Callable
+from typing import Optional, Iterator, TypeVar, Generic, Callable, Tuple, Any
 
 T = TypeVar("T")
 
@@ -114,168 +114,6 @@ class DBConnector:
         self.item_list = self.get_item_list()
         self.location_list = self.get_location_list()
 
-    def get_customer_alias_list(self):
-        self.cursor().execute(self.queryDict["getAliasList"])
-        if self.cursor().rowcount != 0:
-            data = self.cursor.fetchall()
-            return dict(map(lambda x: ((x[0], x[1]), x[2]), data))
-        return None
-
-    def get_customer_list(self):
-        self.cursor().execute(self.queryDict["getCustomerList"])
-        if self.cursor.rowcount != 0:
-            data = self.cursor.fetchall()
-            return dict(map(lambda x: ((x[0], x[1]), x[2]), data))
-        return {}
-
-    def get_item_list(self):
-        self.cursor.execute(self.queryDict["getItemList"])
-        if self.cursor.rowcount != 0:
-            data = self.cursor.fetchall()
-            return dict(map(lambda x: ((x[0], x[1]), x[2]), data))
-        return {}
-
-    def get_location_list(self):
-        self.cursor().execute(self.queryDict["getLocationList"])
-        if self.cursor().rowcount != 0:
-            data = self.cursor().fetchall()
-            return dict(map(lambda x: ((x[0], x[1]), x[2]), data))
-        return {}
-
-    def get_manufacturer_id(self, manufacturer_name):
-        with self.conn.cursor() as cursor:
-            id_query = """select manufacturer_id
-                         from manufacturers
-                         where manufacturer_name = %s;"""
-            cursor.execute(id_query, (manufacturer_name,))
-            if cursor.rowcount != 0:
-                return cursor.fetchone()["manufacturer_id"]
-        return None
-
-    def get_location_id(self, city, state):
-        with self.conn.cursor() as cursor:
-            id_query = """select l.location_id
-                         from locations l
-                         where l.city = %s and l.state = %s;"""
-            cursor.execute(id_query, (city, state,))
-            if cursor.rowcount != 0:
-                return cursor.fetchone()[0]
-        return None
-
-    def get_customer_id(self, customer_name):
-        with self.conn.cursor() as cursor:
-            id_query = """select c.customer_id
-                         from customers c
-                         where c.customer_name = %s;"""
-            cursor.execute(id_query, (customer_name,))
-            if cursor.rowcount != 0:
-                return cursor.fetchone()[0]
-        return None
-
-    def get_report_id(self, manufacturer_id, report_year, report_month):
-        with self.conn.cursor() as cursor:
-            id_query = """select r.report_id
-                         from sales_report r
-                         where r.manufacturer_id = %s and r.report_year = %s and r.report_month = %s;"""
-            cursor.execute(id_query, (manufacturer_id, report_year, report_month,))
-            if cursor.rowcount != 0:
-                return cursor.fetchone()[0]
-        return None
-
-    def get_item_id(self, item_name):
-        with self.conn.cursor() as cursor:
-            id_query = """select i.item_id
-                         from item i
-                         where i.stockcode = %s;"""
-            cursor.execute(id_query, (item_name,))
-            if cursor.rowcount != 0:
-                return cursor.fetchone()[0]
-        return None
-
-    def insert_customer(self, customer):
-        self.conn.cursor().execute(self.queryDict["customerInsert"], (customer,))
-
-    def insert_report(self, report):
-        #dict to store row information
-        #column index for row matches line_data, i.e. line_data["customer"] = row[0]
-        line_data = {"customername": '', "city": '', "state": '', "stockcode": '', "productfamily": '', "productdesc": '',"quantity": 0, "saledate": None, "amount": 0.0, "transfer": ''}
-
-        #insert manufacturer name and check if present already
-        manufacturer_id = self.get_manufacturer_id(report.manufacturerName)
-        if not manufacturer_id:
-            with self.conn.cursor() as cursor:
-                cursor.execute(self.queryDict["manufacturerInsert"], (report.manufacturerName,))
-                manufacturer_id = cursor.fetchone()[0]
-
-        try:
-            with self.conn.cursor() as cursor:
-                cursor.execute(self.queryDict["salesReportInsert"], (manufacturer_id, report.year, report.month))
-                report_id = cursor.fetchone()[0]
-        except psycopg2.Error as insert_exception:
-            print("Failed to insert sales report. Error: ", insert_exception)
-            self.conn.rollback()
-            return
-
-        for row in report.dataframe.itertuples(index=False):
-            #fill line_data dict with information from current row
-            line_data["customername"] = row[0]
-            line_data["city"] = row[1]
-            line_data["state"] = row[2]
-            line_data["stockcode"] = row[3]
-            line_data["productfamily"] = row[4]
-            line_data["productdesc"] = row[5]
-            line_data["quantity"] = row[6]
-            line_data["saledate"] = row[7]
-            line_data["amount"] = row[8]
-            if line_data["amount"] >= 0 and line_data["quantity"] == 0:
-                line_data["quantity"] = None
-            line_data["transfer"] = row[9]
-
-            with self.conn.cursor() as cursor:
-
-                #insert customer
-                if line_data["customername"] not in self.customer_list:
-                    customer_id = self.get_customer_id(line_data["customername"])
-                    if not customer_id:
-                        cursor.execute(self.queryDict["customerInsert"], (line_data["customername"],))
-                        customer_id = cursor.fetchone()[0]
-                        self.customer_list[line_data["customername"]] = customer_id
-                else:
-                    customer_id = self.customer_list[line_data["customername"]]
-                #insert location
-                if (line_data["city"], line_data["state"]) not in self.location_list:
-                    location_id = self.get_location_id(line_data["city"], line_data["state"])
-                    if not location_id:
-                        cursor.execute(self.queryDict["locationInsert"], (line_data["city"], line_data["state"]))
-                        location_id = cursor.fetchone()[0]
-                        self.location_list[(line_data["city"], line_data["state"])] = location_id
-                else:
-                    location_id = self.location_list[(line_data["city"], line_data["state"])]
-                #insert customer location
-                cursor.execute(self.queryDict["checkCustomerLocation"], (customer_id, location_id))
-                rows = cursor.fetchall()
-                if not rows:
-                    cursor.execute(self.queryDict["customerLocationInsert"], (customer_id, location_id))
-                #insert sale customer
-                cursor.execute(self.queryDict["checkSaleCustomer"], (customer_id, report_id, location_id))
-                rows = cursor.fetchall()
-                if not rows:
-                    cursor.execute(self.queryDict["saleCustomerInsert"], (report_id, customer_id, location_id))
-                #insert item
-                if line_data["stockcode"] not in self.item_list:
-                    item_id = self.get_item_id(line_data["stockcode"])
-                    if not item_id:
-                        cursor.execute(self.queryDict["itemInsert"], (line_data["stockcode"], line_data["productfamily"], line_data["productdesc"]))
-                        item_id = cursor.fetchone()[0]
-                        self.item_list[line_data["stockcode"]] = item_id
-                else:
-                    item_id = self.item_list[line_data["stockcode"]]
-                #insert report_line
-                cursor.execute(self.queryDict["reportLineInsert"], (report_id, customer_id, item_id, location_id, float(line_data["amount"]), line_data["saledate"], line_data["quantity"], line_data["transfer"]))
-
-            self.conn.commit()
-
-
     def select_report_by_id(self, _id):
         report_id = _id
         cursor = self.conn.cursor()
@@ -378,7 +216,7 @@ class ReportLine:
     quantity: int
     amt: Decimal
     transfer: str
-    sale_date: date
+    sale_date: str
 
 #------------------------------------------------------------------
 # DAO Classes
@@ -408,7 +246,7 @@ class DAO:
     # Raises error if row count exceeds 'limit'
     #------------------------------------------------------------------
 
-    def get_all(self, limit: int = 1_000) -> list[T]:
+    def get_all(self, limit: int = 10_000) -> list[T]:
         with self.db.cursor() as cursor:
             cursor.execute(f"{self._select} ORDER BY {self._pk} LIMIT %s", (limit,))
             rows = cursor.fetchall()
@@ -424,8 +262,8 @@ class DAO:
 
     def get_all_as_dict(self, limit: int = 15_000) -> dict[T, T]:
         with self.db.cursor() as cursor:
-            rows = self.get_all(limit = limit)
-            return {getattr(row, self._pk): row for row in cursor.fetchall()}
+            cursor.execute(f"{self._select} ORDER BY {self._pk} LIMIT %s", (limit,))
+            return dict(map(lambda x: (x[0], x[1]), cursor.fetchall()))
 
     # ------------------------------------------------------------------
     # get_page - splits table into pages based on page size
@@ -460,10 +298,10 @@ class CustomerDAO(DAO):
 
     _table = "customers"
     _pk = "customer_id"
-    _select = "SELECT customer_id, customer_name FROM customers"
+    _select = "SELECT customer_name, customer_id FROM customers"
 
     def _from_row(self, row) -> Customer:
-        return Customer(**row)
+        return Customer(row[0], row[1])
 
     def get_by_id(self, customer_id: int) -> Optional[Customer]:
         with self.db.cursor() as cursor:
@@ -480,7 +318,7 @@ class CustomerDAO(DAO):
     def create(self, customer: Customer) -> Customer:
         with self.db.cursor() as cursor:
             cursor.execute("INSERT INTO customers (customer_name) VALUES (%s) RETURNING customer_id", (customer.customer_name,))
-            customer.customer_id = cursor.fetchone()["customer_id"]
+            customer.customer_id = cursor.fetchone()[0]
         return customer
 
     def update(self, customer: Customer) -> None:
@@ -550,8 +388,8 @@ class LocationDAO(DAO):
 
     def create(self, location: Location) -> Location:
         with self.db.cursor() as cursor:
-            cursor.execute("INSERT INTO locations (city, state) VALUES (%s, %s) RETURNING location_id", (location.city, location.state))
-            location.location_id = cursor.fetchone()["location_id"]
+            cursor.execute("INSERT INTO locations (city, state) VALUES (%s, %s) ON CONFLICT DO NOTHING RETURNING location_id ", (location.city, location.state))
+            location.location_id = cursor.fetchone()[0]
         return location
 
     def update(self, location: Location) -> None:
@@ -571,6 +409,12 @@ class CustomerLocationDAO(DAO):
     def _from_row(self, row) -> CustomerLocation:
         return CustomerLocation(**row)
 
+    def get(self, customer_id: int, location_id: int) -> Optional[CustomerLocation]:
+        with self.db.cursor() as cursor:
+            cursor.execute(f"{self._select} WHERE customer_id = %s AND location_id = %s", (customer_id, location_id))
+            row = cursor.fetchone()
+            return CustomerLocation(customer_id = row[0], location_id = row[1]) if row else None
+
     def get_locations_for_customer(self, customer_id: int) -> list[CustomerLocation]:
         with self.db.cursor() as cursor:
             cursor.execute(f"{self._select} WHERE customer_id = %s", (customer_id,))
@@ -583,8 +427,18 @@ class CustomerLocationDAO(DAO):
 
     def create(self, link: CustomerLocation) -> CustomerLocation:
         with self.db.cursor() as cursor:
-            cursor.execute("INSERT INTO customer_locations (customer_id, location_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (link.location_id, link.location_id))
+            cursor.execute("INSERT INTO customer_locations (customer_id, location_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (link.customer_id, link.location_id))
         return link
+
+    def create_bulk(self, lines: list[CustomerLocation]) -> None:
+        if not lines:
+            return lines
+
+        values = [(ln.customer_id, ln.location_id) for ln in lines]
+
+        with self.db.cursor() as cursor:
+            psycopg2.extras.execute_values(cursor,"INSERT INTO customer_locations (customer_id, location_id) VALUES %s ON CONFLICT DO NOTHING", values, page_size=500)
+            return None
 
     def delete(self, customer_id: int, location_id: int) -> None:
         with self.db.cursor() as cursor:
@@ -609,12 +463,12 @@ class ManufacturerDAO(DAO):
         with self.db.cursor() as cursor:
             cursor.execute(f"{self._select} WHERE manufacturer_name = %s", (manufacturer_name,))
             row = cursor.fetchone()
-        return Manufacturer(**row) if row else None
+        return Manufacturer(manufacturer_id= row[0], manufacturer_name= row[1]) if row else None
 
     def create(self, manufacturer: Manufacturer) -> Manufacturer:
         with self.db.cursor() as cursor:
             cursor.execute("INSERT INTO manufacturers (manufacturer_name) VALUES (%s) RETURNING manufacturer_id", (manufacturer.manufacturer_name,))
-            manufacturer.manufacturer_id = cursor.fetchone()["manufacturer_id"]
+            manufacturer.manufacturer_id = cursor.fetchone()[0]
         return manufacturer
 
     def update(self, manufacturer: Manufacturer) -> None:
@@ -629,10 +483,10 @@ class ItemDAO(DAO):
 
     _table = "items"
     _pk = "item_id"
-    _select = "SELECT item_id, stockcode, product_family, product_description FROM items"
+    _select = "SELECT item_id, stockcode, product_family, product_description FROM item"
 
     def _from_row(self, row) -> Item:
-        return Item(**row)
+        return Item(row[0], row[1], row[2], row[3])
 
     def get_all_as_dict(self, limit: int = 15_000) -> dict[str, int]:
         with self.db.cursor() as cursor:
@@ -666,8 +520,8 @@ class ItemDAO(DAO):
 
     def create(self, item: Item) -> Item:
         with self.db.cursor() as cursor:
-            cursor.execute("INSERT INTO items (stockcode, product_family, product_description) VALUES (%s, %s, %s) RETURNING item_id", (item.stockcode, item.product_family, item.product_description))
-            item.item_id = cursor.fetchone()["item_id"]
+            cursor.execute("INSERT INTO item (stockcode, product_family, product_description) VALUES (%s, %s, %s) RETURNING item_id", (item.stockcode, item.product_family, item.product_description))
+            item.item_id = cursor.fetchone()[0]
         return item
 
     def update(self, item: Item) -> None:
@@ -676,7 +530,7 @@ class ItemDAO(DAO):
 
     def delete(self, item_id: int) -> None:
         with self.db.cursor() as cursor:
-            cursor.execute("DELETE FROM items WHERE item_id = %s", (item_id,))
+            cursor.execute("DELETE FROM item WHERE item_id = %s", (item_id,))
 
 class SalesReportDAO(DAO):
 
@@ -693,6 +547,12 @@ class SalesReportDAO(DAO):
             row = cursor.fetchone()
         return SalesReport(**row) if row else None
 
+    def check_exists(self, manufacturer_id: int, year: str, month: str) -> bool:
+        with self.db.cursor() as cursor:
+            cursor.execute("SELECT 1 FROM sales_report WHERE manufacturer_id = %s AND year = %s AND month = %s LIMIT 1", (manufacturer_id, year, month))
+            result = cursor.fetchone()[0]
+        return True if result else False
+
     def get_by_manufacturer(self, manufacturer_id: int) -> list[SalesReport]:
         with self.db.cursor() as cursor:
             cursor.execute("SELECT FROM sales_report WHERE manufacturer_id = %s", (manufacturer_id,))
@@ -706,7 +566,7 @@ class SalesReportDAO(DAO):
     def create(self, report: SalesReport) -> SalesReport:
         with self.db.cursor() as cursor:
             cursor.execute("INSERT INTO sales_report (manufacturer_id, report_year, report_month) VALUES (%s, %s, %s) RETURNING report_id", (report.manufacturer_id, report.report_year, report.report_month))
-            report.report_id = cursor.fetchone()["report_id"]
+            report.report_id = cursor.fetchone()[0]
         return report
 
     def delete(self, report_id: int) -> None:
@@ -722,6 +582,12 @@ class SaleCustomerDAO(DAO):
     def _from_row(self, row) -> SaleCustomer:
         return SaleCustomer(**row)
 
+    def get(self, report_id: int, customer_id: int, location_id: int) -> Optional[SaleCustomer]:
+        with self.db.cursor() as cursor:
+            cursor.execute(f"{self._select} WHERE report_id = %s AND customer_id = %s AND location_id = %s", (report_id, customer_id, location_id))
+            row = cursor.fetchone()
+            return SaleCustomer(report_id= row[0], customer_id= row[1], location_id= row[2]) if row else None
+
     def get_by_report(self, report_id: int) -> list[SaleCustomer]:
         with self.db.cursor() as cursor:
             cursor.execute(f"{self._select} WHERE report_id = %s", (report_id,))
@@ -735,6 +601,16 @@ class SaleCustomerDAO(DAO):
         with self.db.cursor() as cursor:
             cursor.execute("DELETE FROM sale_customer WHERE report_id = %s AND customer_id = %s AND location_id = %s", (report_id, customer_id, location_id))
 
+    def create_bulk(self, lines: list[SaleCustomer]) -> None:
+        if not lines:
+            return lines
+
+        values = [(ln.report_id, ln.customer_id, ln.location_id) for ln in lines]
+
+        with self.db.cursor() as cursor:
+            psycopg2.extras.execute_values(cursor,"INSERT INTO sale_customer (report_id, customer_id, location_id) VALUES %s ON CONFLICT DO NOTHING", values, page_size=500)
+            return None
+
 class ReportLineDAO(DAO):
 
     _table = "report_line"
@@ -742,7 +618,7 @@ class ReportLineDAO(DAO):
     _select = "SELECT report_line_id, report_id, customer_id, item_id, quantity, amt, transfer, location_id, sale_date FROM report_line"
 
     def _from_row(self, row) -> ReportLine:
-        return ReportLine(**row)
+        return ReportLine(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8])
 
     def get_by_id(self, report_line_id: int) -> Optional[ReportLine]:
         with self.db.cursor() as cursor:
@@ -750,28 +626,18 @@ class ReportLineDAO(DAO):
             row = cursor.fetchone()
             return ReportLine(**row) if row else None
 
-    def get_by_report(self, report_id: int) -> list[ReportLine]:
+    def get_by_report(self, report_id: int) -> list[tuple[Any, ]]:
         with self.db.cursor() as cursor:
              cursor.execute(f"{self._select} WHERE report_id = %s ORDER BY report_line_id", (report_id,))
-             return [ReportLine(**row) for row in cursor.fetchall()]
+             return cursor.fetchall()
 
-    def stream_by_report(
-            self,
-            report_id: int,
-            chunk_size: int = 500,
-    ) -> Iterator[ReportLine]:
+    def stream_by_report(self, report_id: int, chunk_size: int = 500) -> Iterator[ReportLine]:
         # Named cursors must NOT go through the commit/rollback wrapper —
         # they need their own connection transaction scope.
         conn = self.db.conn
-        with conn.cursor(
-                name="report_line_stream",
-                cursor_factory=psycopg2.extras.RealDictCursor,
-        ) as cur:
+        with conn.cursor(name="report_line_stream", cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.itersize = chunk_size
-            cur.execute(
-                f"{self._select} WHERE report_id = %s ORDER BY report_line_id",
-                (report_id,),
-            )
+            cur.execute(f"{self._select} WHERE report_id = %s ORDER BY report_line_id", (report_id,))
             for row in cur:  # psycopg2 fetches `itersize` rows per round-trip
                 yield ReportLine(**row)
 
@@ -782,3 +648,41 @@ class ReportLineDAO(DAO):
 
     def get_by_date_range(self):
         print()
+
+    def create(self, line: ReportLine) -> None:
+        with self.db.cursor() as cursor:
+            #"reportLineInsert": """insert into report_line(report_id, customer_id, item_id, location_id, amt, sale_date, quantity, transfer) values (%s, %s, %s, %s, %s, %s, %s, %s);"""
+            cursor.execute("INSERT INTO report_line  (report_id, customer_id, item_id, quantity, amt, transfer, location_id, sale_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                (line.report_id, line.customer_id, line.item_id, line.quantity, line.amt, line.transfer, line.location_id, line.sale_date,))
+
+    def direct_insert(self, report_id, customer_id, item_id, location_id, amount, saledate, quantity, transfer):
+        with self.db.cursor() as cursor:
+            cursor.execute("insert into report_line(report_id, customer_id, item_id, location_id, amt, sale_date, quantity, transfer) values (%s, %s, %s, %s, %s, %s, %s, %s);",
+                           (report_id, customer_id, item_id, location_id, amount, saledate, quantity, transfer))
+
+    def create_bulk(self, lines: list[ReportLine]) -> None:
+        if not lines:
+            return lines
+
+        values = [(ln.report_id, ln.customer_id, ln.item_id, ln.quantity, ln.amt, ln.transfer, ln.location_id, ln.sale_date,) for ln in lines]
+
+        with self.db.cursor() as cursor:
+            psycopg2.extras.execute_values(cursor,"INSERT INTO report_line (report_id, customer_id, item_id, quantity, amt, transfer, location_id, sale_date) VALUES %s", values, page_size=500)
+            return None
+
+class DAOFactory:
+
+    def __init__(self, db):
+        self.db = db
+        self.customers = CustomerDAO(db)
+        self.customer_aliases = CustomerAliasDAO(db)
+        self.locations = LocationDAO(db)
+        self.customer_locations = CustomerLocationDAO(db)
+        self.manufacturers = ManufacturerDAO(db)
+        self.items = ItemDAO(db)
+        self.sales_reports = SalesReportDAO(db)
+        self.sale_customers = SaleCustomerDAO(db)
+        self.report_lines = ReportLineDAO(db)
+
+    def close(self):
+        self.db.close()
