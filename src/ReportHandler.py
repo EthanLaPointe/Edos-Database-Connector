@@ -26,6 +26,14 @@ class ReportHandler:
         self.item_list = self.dao.items.get_all_as_dict()
         self.alias_list = self.dao.customer_aliases.get_all_as_dict()
 
+    def update_lists(self):
+        self.customer_list = self.dao.customers.get_all_as_dict()
+        self.location_list = self.dao.locations.get_all_as_dict()
+        self.item_list = self.dao.items.get_all_as_dict()
+        self.alias_list = self.dao.customer_aliases.get_all_as_dict()
+        print("customer list", self.customer_list)
+        print("alias list", self.alias_list)
+
     def insert_report(self, report) -> None:
         # dict to store row information
         # column index for row matches line_data, i.e. line_data["customer"] = row[0]
@@ -156,7 +164,7 @@ class ReportHandler:
         #Remove any $ from amount column
         dataframe["amount"] = dataframe["amount"].astype(str).str.replace(r'[$,)#]', '', regex=True).str.strip().replace('', '0.0').replace(r'[-(]', '-0', regex=True).fillna(0.0).astype(float)
         #Remove special characters from customer name
-        dataframe["customername"] = dataframe["customername"].astype(str).str.replace(r"[.'(),-]", '', regex=True).str.replace("  ", " ")
+        dataframe["customername"] = dataframe["customername"].astype(str).str.replace(r"[.'(),-]", '', regex=True).str.replace(r' +', ' ', regex=True).str.strip()
         #Fill any leftover empty cells with None
         dataframe = dataframe.replace({np.nan: None})
         #Remove any rows where amount is 0 & set quantity to null if it = 0 where amount is > 0
@@ -171,17 +179,27 @@ class ReportHandler:
         standardized_report.dataframe = self.fill_empty(self.trim_report(standardized_report.dataframe, report_path))
         return standardized_report
 
-    def check_report(self, report) -> tuple[bool, list[str]]:
-        unknown_list = []
+    #------------------------------------------------------------------
+    # check_report - checks database to see if a report exists with the
+    # same manufacturer and period already. Loops through report
+    # to find unknown customer names.
+    #------------------------------------------------------------------
+
+    def check_report(self, report) -> tuple[bool, dict[str, int]]:
+        unknown_list = {}
         manufacturer = self.dao.manufacturers.get_by_name(report.manufacturerName)
         valid_report = True
 
+        # If a report of the same manufacturer and period exists valid_report is set False
         if manufacturer:
             valid_report = not self.dao.sales_reports.check_exists(manufacturer.manufacturer_id, report.year, report.month)
 
+        # Add each unique unknown name to the unknown_list
+        name: str
         for name in report.dataframe["customername"]:
+            #print(name)
             if name not in self.alias_list and name not in self.customer_list:
-                unknown_list.append(name)
+                unknown_list[name] = 0
 
         return valid_report, unknown_list
 
