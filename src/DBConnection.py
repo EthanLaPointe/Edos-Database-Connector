@@ -25,23 +25,6 @@ class DBConnector:
 
     def __init__(self):
         self.conn = None
-        self.queryDict = {"manufacturerInsert": "INSERT INTO manufacturers(manufacturer_name) VALUES (%s) RETURNING manufacturer_id",
-                 "salesReportInsert": """insert into sales_report(manufacturer_id, report_year, report_month) values (%s, %s, %s) returning report_id;""",
-                 "customerInsert": """insert into customers(customer_name) values (%s) returning customer_id;""",
-                 "locationInsert": """insert into locations(city, state) values (%s, %s) returning location_id;""",
-                 "customerLocationInsert": """insert into customer_locations(customer_id, location_id) values (%s, %s);""",
-                 "saleCustomerInsert": """insert into sale_customer(report_id, customer_id, location_id) values (%s, %s, %s);""",
-                 "itemInsert": """insert into item(stockcode, product_family, product_description) values (%s, %s, %s) returning item_id;""",
-                 "reportLineInsert": """insert into report_line(report_id, customer_id, item_id, location_id, amt, sale_date, quantity, transfer) values (%s, %s, %s, %s, %s, %s, %s, %s);""",
-                 "checkCustomer": """select c.customer_name from customers c where c.customer_name = %s;""",
-                 "checkLocation" : """select l.city, l.state from locations l where l.city = %s and l.state = %s;""",
-                 "checkCustomerLocation": """select cl.customer_id, cl.location_id from customer_locations cl where cl.customer_id = %s and cl.location_id = %s;""",
-                 "checkSaleCustomer": """select sc.customer_id, sc.report_id, sc.location_id from sale_customer sc where sc.customer_id = %s and sc.report_id = %s and sc.location_id = %s;""",
-                 "checkItem": """select i.stockcode from item i where i.stockcode = %s;""",
-                 "getItemList": """select i.stockcode, i.item_id from item i;""",
-                 "getCustomerList": """select c.customer_name, c.customer_id from customers c;""",
-                 "getAliasList": """select ca.alias, c.customer_id from customers c join customer_alias ca on ca.customer_id = c.customer_id;""",
-                 "getLocationList": """select l.city, l.state, l.location_id from locations l;"""}
         self.customer_list = {}
         self.alias_list = {}
         self.location_list = {}
@@ -301,25 +284,35 @@ class CustomerDAO(DAO):
     _select = "SELECT customer_name, customer_id FROM customers"
 
     def _from_row(self, row) -> Customer:
-        return Customer(row[0], row[1])
+        return Customer(customer_name = row[0], customer_id = row[1])
 
     def get_by_id(self, customer_id: int) -> Optional[Customer]:
         with self.db.cursor() as cursor:
             cursor.execute(f"{self._select} WHERE customer_id = %s", (customer_id,))
             row = cursor.fetchone()
-        return Customer(**row) if row else None
+        return self._from_row(row) if row else None
 
     def get_by_name(self, customer_name: str) -> Optional[Customer]:
         with self.db.cursor() as cursor:
             cursor.execute(f"{self._select} WHERE customer_name = %s", (customer_name,))
             row = cursor.fetchone()
-        return Customer(**row) if row else None
+        return self._from_row(row) if row else None
 
     def create(self, customer: Customer) -> Customer:
         with self.db.cursor() as cursor:
             cursor.execute("INSERT INTO customers (customer_name) VALUES (%s) RETURNING customer_id", (customer.customer_name,))
             customer.customer_id = cursor.fetchone()[0]
         return customer
+
+    def create_bulk(self, lines: list[Customer]) -> None:
+        if not lines:
+            return None
+
+        values = [(ln.customer_name,) for ln in lines]
+
+        with self.db.cursor() as cursor:
+            psycopg2.extras.execute_values(cursor,"INSERT INTO customers (customer_name) VALUES %s ON CONFLICT DO NOTHING", values, page_size=500)
+            return None
 
     def update(self, customer: Customer) -> None:
         with self.db.cursor() as cursor:
@@ -347,6 +340,17 @@ class CustomerAliasDAO(DAO):
         with self.db.cursor() as cursor:
             cursor.execute("INSERT INTO customer_alias (alias, customer_id) VALUES (%s, %s)", (alias.alias, alias.customer_id))
 
+    def create_bulk(self, lines: list[CustomerAlias]) -> None:
+        if not lines:
+            return None
+
+        values = [(ln.alias, ln.customer_id) for ln in lines]
+
+        with self.db.cursor() as cursor:
+            psycopg2.extras.execute_values(cursor,"INSERT INTO customer_alias (alias, customer_id) VALUES %s ON CONFLICT DO NOTHING", values, page_size=500)
+            return None
+
+
     def delete(self, alias: str) -> None:
         with self.db.cursor() as cursor:
             cursor.execute("DELETE FROM customer_alias WHERE alias = %s", (alias,))
@@ -360,12 +364,12 @@ class LocationDAO(DAO):
     def _from_row(self, row) -> Location:
         return Location(**row)
 
-    def get_all_as_dict(self) -> dict[(str, str), int]:
+    def get_all_as_dict(self) -> dict[tuple[str, str], int]:
         with self.db.cursor() as cursor:
             cursor.execute(f"{self._select} ORDER BY {self._pk}")
             return dict(map(lambda x: ((x[1], x[2]), x[0]), cursor.fetchall()))
 
-    def get_page_as_dict(self, page_size: int = 100, page_number: Optional[int] = None,) -> dict[(str, str), int]:
+    def get_page_as_dict(self, page_size: int = 100, page_number: Optional[int] = None,) -> dict[tuple[str, str], int]:
         with self.db.cursor() as cursor:
             if page_number is None:
                 cursor.execute(f"{self._select} ORDER BY state, city LIMIT %s", (page_size,))

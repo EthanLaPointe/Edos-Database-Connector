@@ -65,9 +65,8 @@ try:
             if conn_failed_choice == 2:
                 sys.exit()
     print("Connection to database successful")
-    #connector.populate_lists()
-    factory = DAOFactory(connector)
-    handler = ReportHandler(connector, factory)
+    dao = DAOFactory(connector)
+    handler = ReportHandler(connector, dao)
     choice = 0
 
     while choice != 3:
@@ -84,18 +83,43 @@ try:
                 reportPath = reportPath[1:-1]
             print("Standardizing: " + reportPath + "...")
             report = handler.standardize(reportPath)
-            print("Checking:" + reportPath + "...")
+            print("Checking: " + reportPath + "...")
             valid = handler.check_report(report)
             if valid[0] and len(valid[1]) == 0:
                 print("Inserting: " + reportPath + "...")
                 handler.insert_report(report)
             elif valid[0] and len(valid[1]) > 0:
+                unknown_list = valid[1]
+                aliases_to_add = []
                 print("Unknown customers found")
-                print(valid[1])
+                print("1. Resolve unknown customers.")
+                print("2. Cancel insert.")
+                check_choice = int(input())
+                if check_choice == 1:
+                    for name in unknown_list.keys():
+                        print("\033[H\033[J", end="")
+                        exists = False
+                        while not exists:
+                            print(name)
+                            print("Enter customer this name should be associated with. Enter \"new\" to add as new customer.")
+                            association = str(input()).lower()
+                            if association != 'new':
+                                customer_id = dao.customers.get_by_name(association).customer_id
+                                if customer_id is not None:
+                                    aliases_to_add.append(CustomerAlias(alias= name, customer_id= customer_id))
+                                    exists = True
+                                else:
+                                    print("Please enter existing customer.")
+                            else:
+                                dao.customers.create(Customer(customer_id= None, customer_name= name))
+                                exists = True
+                    dao.customer_aliases.create_bulk(aliases_to_add)
+                    handler.update_lists()
+                    print("All customer aliases added.")
+                    print("Inserting: " + reportPath + "...")
+                    handler.insert_report(report)
             else:
                 print("Report already exists for", report.manufacturerName, " during the period", report.month, ",", report.year)
-
-
 
         if choice == 2:
             print("Enter path to the folder:")
@@ -114,6 +138,7 @@ try:
 
         if choice == 3:
             print("Exiting program...")
+            sys.exit()
 
         if choice == 4:
             print("Enter file path of report:")
@@ -133,11 +158,6 @@ try:
                 print(aliasList[testvalue])
             else:
                 print(testvalue + " not found")
-
-        if choice == 6:
-            testlist = {1: "fw webb", 2: "winnelson"}
-            if "fw webb" in testlist.values():
-                print(testlist["fw webb"])
 
         if choice == 7:
             rld = ReportLineDAO(connector)
