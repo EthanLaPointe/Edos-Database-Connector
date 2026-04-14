@@ -16,7 +16,7 @@ class Report:
         self.filePath = Path(file_path)
         self.dataframe = pd.read_csv(self.filePath, encoding='latin-1').astype(str)
         self.reportName = self.filePath.name
-        self.manufacturerName = self.reportName.split()[0]
+        self.manufacturerName = self.reportName.split()[0].lower()
 
         # Get report date from filename
         match = re.search(r"(January|February|March|April|May|June|July|August|September|October|November|December)",
