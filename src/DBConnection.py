@@ -193,6 +193,7 @@ class SaleCustomer:
 class ReportLine:
     report_line_id: Optional[int]
     report_id: int
+    customer_alias: str
     customer_id: int
     location_id: int
     item_id: int
@@ -452,22 +453,22 @@ class ManufacturerDAO(DAO):
 
     _table = "manufacturers"
     _pk = "manufacturer_id"
-    _select = "SELECT manufacturer_id, manufacturer_name FROM manufacturers"
+    _select = "SELECT manufacturer_name, manufacturer_id FROM manufacturers"
 
     def _from_row(self, row) -> Manufacturer:
-        return Manufacturer(**row)
+        return Manufacturer(row[1], row[0])
 
     def get_by_id(self, manufacturer_id: int) -> Optional[Manufacturer]:
         with self.db.cursor() as cursor:
             cursor.execute(f"{self._select} WHERE manufacturer_id = %s", (manufacturer_id,))
             row = cursor.fetchone()
-        return Manufacturer(**row) if row else None
+        return self._from_row(row) if row else None
 
     def get_by_name(self, manufacturer_name: str) -> Optional[Manufacturer]:
         with self.db.cursor() as cursor:
             cursor.execute(f"{self._select} WHERE manufacturer_name = %s", (manufacturer_name,))
             row = cursor.fetchone()
-        return Manufacturer(manufacturer_id= row[0], manufacturer_name= row[1]) if row else None
+        return self._from_row(row) if row else None
 
     def create(self, manufacturer: Manufacturer) -> Manufacturer:
         with self.db.cursor() as cursor:
@@ -553,8 +554,8 @@ class SalesReportDAO(DAO):
 
     def check_exists(self, manufacturer_id: int, year: str, month: str) -> bool:
         with self.db.cursor() as cursor:
-            cursor.execute("SELECT 1 FROM sales_report WHERE manufacturer_id = %s AND year = %s AND month = %s LIMIT 1", (manufacturer_id, year, month))
-            result = cursor.fetchone()[0]
+            cursor.execute("SELECT 1 FROM sales_report WHERE manufacturer_id = %s AND report_year = %s AND report_month = %s LIMIT 1", (manufacturer_id, year, month))
+            result = cursor.fetchone()
         return True if result else False
 
     def get_by_manufacturer(self, manufacturer_id: int) -> list[SalesReport]:
@@ -619,10 +620,10 @@ class ReportLineDAO(DAO):
 
     _table = "report_line"
     _pk = "report_line_id"
-    _select = "SELECT report_line_id, report_id, customer_id, item_id, quantity, amt, transfer, location_id, sale_date FROM report_line"
+    _select = "SELECT report_line_id, report_id, customer_alias, customer_id, item_id, quantity, amt, transfer, location_id, sale_date FROM report_line"
 
     def _from_row(self, row) -> ReportLine:
-        return ReportLine(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8])
+        return ReportLine(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9])
 
     def get_by_id(self, report_line_id: int) -> Optional[ReportLine]:
         with self.db.cursor() as cursor:
@@ -668,10 +669,10 @@ class ReportLineDAO(DAO):
         if not lines:
             return lines
 
-        values = [(ln.report_id, ln.customer_id, ln.item_id, ln.quantity, ln.amt, ln.transfer, ln.location_id, ln.sale_date,) for ln in lines]
+        values = [(ln.report_id, ln.customer_alias, ln.customer_id, ln.item_id, ln.quantity, ln.amt, ln.transfer, ln.location_id, ln.sale_date,) for ln in lines]
 
         with self.db.cursor() as cursor:
-            psycopg2.extras.execute_values(cursor,"INSERT INTO report_line (report_id, customer_id, item_id, quantity, amt, transfer, location_id, sale_date) VALUES %s", values, page_size=500)
+            psycopg2.extras.execute_values(cursor,"INSERT INTO report_line (report_id, customer_alias, customer_id, item_id, quantity, amt, transfer, location_id, sale_date) VALUES %s", values, page_size=500)
             return None
 
 class DAOFactory:

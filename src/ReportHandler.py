@@ -5,12 +5,6 @@ from Report import Report
 from DBConnection import *
 from decimal import Decimal
 import psycopg2.extras
-import contextlib
-from functools import reduce
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from datetime import date
-from typing import Optional, Iterator, TypeVar, Generic, Callable, Tuple, Any
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
@@ -21,18 +15,20 @@ class ReportHandler:
     def __init__(self, db_connector: DBConnector, dao_factory: DAOFactory):
         self.db = db_connector
         self.dao = dao_factory
-        self.customer_list = self.dao.customers.get_all_as_dict()
         self.location_list = self.dao.locations.get_all_as_dict()
+        self.customer_alias_list = self.dao.customer_aliases.get_all_as_dict() | self.dao.customers.get_all_as_dict()
         self.item_list = self.dao.items.get_all_as_dict()
-        self.alias_list = self.dao.customer_aliases.get_all_as_dict()
+        self.manufacturer_list = self.dao.manufacturers.get_all_as_dict()
+        print(self.manufacturer_list)
+        # List of fields the report must contain
+        self.fieldList = ["customername", "city", "state", "stockcode", "productfam", "productdesc", "quantity", "date",
+                     "amount", "transfer"]
 
     def update_lists(self):
-        self.customer_list = self.dao.customers.get_all_as_dict()
         self.location_list = self.dao.locations.get_all_as_dict()
+        self.customer_alias_list = self.dao.customer_aliases.get_all_as_dict() | self.dao.customers.get_all_as_dict()
         self.item_list = self.dao.items.get_all_as_dict()
-        self.alias_list = self.dao.customer_aliases.get_all_as_dict()
-        print("customer list", self.customer_list)
-        print("alias list", self.alias_list)
+        self.manufacturer_list = self.dao.manufacturers.get_all_as_dict()
 
     def insert_report(self, report) -> None:
         # dict to store row information
@@ -72,15 +68,8 @@ class ReportHandler:
                 line_data["quantity"] = None
             line_data["transfer"] = row[9]
 
-            # insert customer
-            if line_data["customername"] in self.alias_list:
-                customer_id = self.alias_list[line_data["customername"]]
-            elif line_data["customername"] in self.customer_list:
-                customer_id = self.customer_list[line_data["customername"]]
-            else:
-                customer = self.dao.customers.create(Customer(customer_id = None, customer_name = line_data["customername"]))
-                self.customer_list[line_data["customername"]] = customer.customer_id
-                customer_id = customer.customer_id
+            # retrieve customer_id from list
+            customer_id = self.customer_alias_list[line_data["customername"]]
 
             # insert location
             if (line_data["city"], line_data["state"]) in self.location_list:
@@ -105,7 +94,7 @@ class ReportHandler:
                 self.item_list[line_data["stockcode"]] = item_id
 
             # save each line of report to a list of ReportLine
-            line = ReportLine(report_line_id = None, report_id = sales_report.report_id, customer_id = customer_id, item_id = item_id, location_id = location_id, quantity = line_data["quantity"],
+            line = ReportLine(report_line_id = None, report_id = sales_report.report_id, customer_alias= line_data["customername"], customer_id = customer_id, item_id = item_id, location_id = location_id, quantity = line_data["quantity"],
                               transfer = line_data["transfer"], amt = Decimal(line_data["amount"]), sale_date = line_data["saledate"] )
             report_line_list.append(line)
 
@@ -113,9 +102,6 @@ class ReportHandler:
         self.dao.customer_locations.create_bulk(customer_location_list)
         self.dao.sale_customers.create_bulk(sale_customer_list)
         self.dao.report_lines.create_bulk(report_line_list)
-
-    #List of fields the report must contain
-    fieldList = ["customername", "city", "state", "stockcode", "productfam", "productdesc", "quantity", "date", "amount", "transfer"]
 
     def trim_report(self, dataframe, file_path) -> pd.DataFrame:
         fields_to_keep = []
@@ -180,26 +166,26 @@ class ReportHandler:
         return standardized_report
 
     #------------------------------------------------------------------
-    # check_report - checks database to see if a report exists with the
-    # same manufacturer and period already. Loops through report
-    # to find unknown customer names.
+    # check_report - checks validity of report being entered
     #------------------------------------------------------------------
 
-    def check_report(self, report) -> tuple[bool, dict[str, int]]:
+    def check_report(self, report) -> tuple[tuple[bool, bool], dict[str, int]]:
         unknown_list = {}
-        manufacturer = self.dao.manufacturers.get_by_name(report.manufacturerName)
-        valid_report = True
+        valid_manufacturer = False
+        already_present = False
+        manufacturer = None
 
-        # If a report of the same manufacturer and period exists valid_report is set False
-        if manufacturer:
-            valid_report = not self.dao.sales_reports.check_exists(manufacturer.manufacturer_id, report.year, report.month)
+        # check if manufacturer on report exists in database
+        # if exists then check if a report already exists for that manufacturer during the report period
+        if report.manufacturerName in self.manufacturer_list:
+            valid_manufacturer = True
+            manufacturer = self.dao.manufacturers.get_by_name(report.manufacturerName)
+            already_present = self.dao.sales_reports.check_exists(manufacturer.manufacturer_id, report.year,report.month)
 
         # Add each unique unknown name to the unknown_list
-        name: str
         for name in report.dataframe["customername"]:
-            #print(name)
-            if name not in self.alias_list and name not in self.customer_list:
+            if name not in self.customer_alias_list:
                 unknown_list[name] = 0
 
-        return valid_report, unknown_list
+        return (valid_manufacturer, already_present), unknown_list
 
