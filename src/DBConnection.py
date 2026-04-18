@@ -44,7 +44,7 @@ class DBConnector:
         self.conn.cursor().close()
         self.conn.close()
 
-    def connect(self):
+    def connect(self) -> None:
         if self.check_credentials():
             credentials = self.get_credentials()
             self.conn = psycopg2.connect(

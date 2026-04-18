@@ -1,5 +1,4 @@
 import psycopg2
-from pip._internal.resolution.resolvelib.factory import Factory
 
 from ReportHandler import ReportHandler
 from Report import Report
@@ -84,19 +83,6 @@ def insert_report(report_path: str) -> bool:
 
 connector = DBConnector()
 connectionStatus = 0
-queryDict = {"manufacturerInsert": """insert into manufacturers(manufacturer_name) values (%s) returning manufacturer_id;""",
-             "salesReportInsert": """insert into sales_report(manufacturer_id, report_year, report_month) values (%s, %s, %s) returning report_id;""",
-             "customerInsert": """insert into customers(customer_name) values (%s) returning customer_id;""",
-             "locationInsert": """insert into locations(city, state) values (%s, %s) returning location_id;""",
-             "customerLocationInsert": """insert into customer_locations(customer_id, location_id) values (%s, %s);""",
-             "saleCustomerInsert": """insert into sale_customer(report_id, customer_id, location_id) values (%s, %s, %s);""",
-             "itemInsert": """insert into item(stockcode, product_family, product_description) values (%s, %s, %s) returning item_id;""",
-             "reportLineInsert": """insert into report_line(report_id, customer_id, item_id, location_id, amt, sale_date, quantity, transfer) values (%s, %s, %s, %s, %s, %s, %s, %s);""",
-             "checkCustomer": """select c.customer_name from customers c where c.customer_name = %s;""",
-             "checkLocation" : """select l.city, l.state from locations l where l.city = %s and l.state = %s;""",
-             "checkCustomerLocation": """select cl.customer_id, cl.location_id from customer_locations cl where cl.customer_id = %s and cl.location_id = %s;""",
-             "checkSaleCustomer": """select sc.customer_id, sc.report_id, sc.location_id from sale_customer sc where sc.customer_id = %s and sc.report_id = %s and sc.location_id = %s;""",
-             "checkItem": """select i.stockcode from item i where i.stockcode = %s;"""}
 
 def get_user_credentials():
     credentials = []
