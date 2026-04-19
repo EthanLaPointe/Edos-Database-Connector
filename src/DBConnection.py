@@ -77,17 +77,17 @@ class DBConnector:
             "port": port
         }
 
-        file_path = 'credentials.json'
+        file_path = os.path.join(os.path.dirname(__file__), 'credentials.json')
         with open(file_path, 'w') as f:
             json.dump(data, f)
 
     @staticmethod
     def check_credentials():
-        return os.path.isfile('credentials.json')
+        return os.path.isfile(os.path.join(os.path.dirname(__file__), 'credentials.json'))
 
     @staticmethod
     def get_credentials():
-        with open('credentials.json', 'r') as f:
+        with open(os.path.join(os.path.dirname(__file__), 'credentials.json'), 'r') as f:
             credentials = json.load(f)
         return credentials
 
