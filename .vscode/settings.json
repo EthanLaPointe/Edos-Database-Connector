@@ -1,0 +1,10 @@
+{
+    "python.analysis.extraPaths": [
+        "./src/pages"
+    ],
+    "python-envs.defaultEnvManager": "ms-python.python:venv",
+    "terminal.integrated.env.windows": { "PYTHONPATH": "${workspaceFolder}" },
+    "terminal.integrated.env.osx": { "PYTHONPATH": "${workspaceFolder}" },
+    "terminal.integrated.env.linux": { "PYTHONPATH": "${workspaceFolder}" }
+
+}
