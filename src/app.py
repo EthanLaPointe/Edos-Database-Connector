@@ -2,7 +2,8 @@ from typing import Union
 from src.pages.LoginPage import LoginPage
 from src.pages.HomePage import HomePage
 from src.pages.ReportPage import ReportPage
-from DBConnection import *
+
+from DBConnection import DBConnector
 import traceback
 
 import customtkinter as ctk
@@ -21,9 +22,9 @@ class App(ctk.CTk):
         self.screen_height = int(self.winfo_screenheight()/2)
         self.minsize(800, 550)
         self._resize_job = None
+        self.current_user = None
 
-        #self.geometry(f"{self.screen_width}x{self.screen_height}")
-        self.geometry("1000x650")
+        self.geometry(f"{self.screen_width}x{self.screen_height}")
         self.title("Edos Database Connector")
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
@@ -40,6 +41,7 @@ class App(ctk.CTk):
             frame.grid(row=0, column=0, sticky="nsew")
 
         if connector.check_credentials():
+            print("Credentials found, attempting connection...")
             try:
                 connector.connect()
                 self.connection_status = connector.conn.status
@@ -48,7 +50,8 @@ class App(ctk.CTk):
                 self.frames[LoginPage].show_error(str(e))
 
             if self.connection_status == 1:
-                self.show_frame(HomePage)
+                self.current_user = connector.get_credentials()["user"]
+                self.show_frame(HomePage, user=self.current_user)
         else:
             self.show_frame(LoginPage)
 
@@ -71,10 +74,10 @@ class App(ctk.CTk):
         if hasattr(frame, "on_show"):
             frame.on_show(**kwargs)
 
-    def login(self, credentials):
-        self.show_frame(HomePage)
-
-
-
-app = App(DBConnector())
-app.mainloop()
+    def login(self):
+        self.show_frame(HomePage, user=self.current_user)
+    
+    def logout(self):
+        self.connector.conn.close()
+        self.current_user = None
+        self.show_frame(LoginPage)
