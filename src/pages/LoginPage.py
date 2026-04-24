@@ -8,6 +8,15 @@ class LoginPage(QWidget):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
+        self.database_input = None
+        self.username_input = None
+        self.password_input = None
+        self.host_input = None
+        self.port_input = None
+        self.error_label = None
+        self.login_button = None
+        self.input_spacing = 14
+        
         self._build_ui()
         
     def _build_ui(self):
@@ -19,7 +28,7 @@ class LoginPage(QWidget):
         # Card
         card = QFrame()
         card.setObjectName("card")
-        card.setFixedSize(400, 460)
+        card.setFixedSize(400, 600)
         outer.addWidget(card)
         
         # Card Layout
@@ -48,9 +57,9 @@ class LoginPage(QWidget):
         self.database_input = QLineEdit()
         self.database_input.setPlaceholderText("Enter database name")
         self.database_input.setMinimumHeight(42)
-        self.username_input.returnPressed.connect(self.set_focus)
+        self.database_input.returnPressed.connect(self.set_focus)
         layout.addWidget(self.database_input)
-        layout.addSpacing(14)
+        layout.addSpacing(self.input_spacing)
         
         # Username
         username_label = QLabel("Username")
@@ -63,7 +72,7 @@ class LoginPage(QWidget):
         self.username_input.setMinimumHeight(42)
         self.username_input.returnPressed.connect(self.set_focus)
         layout.addWidget(self.username_input)
-        layout.addSpacing(14)
+        layout.addSpacing(self.input_spacing)
         
         # Password
         password_label = QLabel("Password")
@@ -77,7 +86,7 @@ class LoginPage(QWidget):
         self.password_input.setEchoMode(QLineEdit.Password)
         self.password_input.returnPressed.connect(self.set_focus)
         layout.addWidget(self.password_input)
-        layout.addSpacing(14)
+        layout.addSpacing(self.input_spacing)
         
         # Host
         host_label = QLabel("Host")
@@ -90,7 +99,7 @@ class LoginPage(QWidget):
         self.host_input.setMinimumHeight(42)
         self.host_input.returnPressed.connect(self.set_focus)
         layout.addWidget(self.host_input)
-        layout.addSpacing(14)
+        layout.addSpacing(self.input_spacing)
         
         # Port
         port_label = QLabel("Port")
@@ -146,6 +155,28 @@ class LoginPage(QWidget):
             self.error_label.setText("Please fill in all required fields.")
             self.error_label.setVisible(True)
             return
+        
+        self.controller.connector.set_credentials(database, username, password, host, port)
+        connection_status = 0
+        
+        if self.controller.connector.check_credentials():
+            try:
+                self.controller.connector.connect()
+                connection_status = self.controller.connector.conn.status
+            except Exception as e:
+                self.show_error(f"Connection failed: {str(e)}")
+                return
+        
+        if connection_status == 1:
+            self.controller.login(username)
+        
+    def show_error(self, message: str):
+        if message:
+            self.error_label.setText(message)
+            self.error_label.setVisible(True)
+        else:
+            self.error_label.setText("")
+            self.error_label.setVisible(False)
         
         
         

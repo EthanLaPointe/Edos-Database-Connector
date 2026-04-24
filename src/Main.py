@@ -3,7 +3,7 @@ from DBConnection import DBConnector
 from PySide6 import QtWidgets
 from PySide6.QtWidgets import QApplication, QWidget, QMainWindow, QPushButton
 import sys
-
+import os
 
 #if __name__ == "__main__":
 #    connector = DBConnector()
@@ -15,9 +15,9 @@ if __name__ == "__main__":
     app.setApplicationName("Edos Database Connector")
     
     # Load Style Sheet
-    with open("style.qss", "r") as f:
+    with open(os.path.join(os.path.dirname(__file__), 'style.qss'), 'r') as f:
         app.setStyleSheet(f.read())
         
-    window = App()
+    window = App(DBConnector())
     window.show()
     sys.exit(app.exec())

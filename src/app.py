@@ -27,7 +27,20 @@ class App(QMainWindow):
         for page in (self.login_page, self.home_page, self.report_page):
             self.stack.addWidget(page)
         
-        self.show_page(self.login_page)
+        connection_status = 0
+        if self.connector.check_credentials():
+            try:
+                self.connector.connect()
+                connection_status = self.connector.conn.status
+            except Exception as e:
+                self.show_page(self.login_page)
+                self.login_page._show_error(e)
+            
+            if connection_status == 1:
+                self.current_user = self.connector.get_credentials()["user"]
+                self.show_page(self.home_page)
+        else:
+            self.show_page(self.login_page)
         
     # Page Navigation
     def show_page(self, page: QWidget):
@@ -42,6 +55,12 @@ class App(QMainWindow):
     def logout(self):
         self.current_user = None
         self.show_page(self.login_page)
+        
+    def show_home(self):
+        self.show_page(self.home_page)
+        
+    def show_report(self):
+        self.show_page(self.report_page)
         
         
         
