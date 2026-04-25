@@ -3,9 +3,11 @@ from PySide6.QtCore import Qt
 from pages.LoginPage import LoginPage
 from pages.HomePage import HomePage
 from pages.ReportPage import ReportPage
+from DBConnection import *
+from ReportHandler import ReportHandler
 
 class App(QMainWindow):
-    def __init__(self, connector=None):
+    def __init__(self, connector: DBConnector=None):
         super().__init__()
         self.setWindowTitle("Edos Database Connector")
         self.setMinimumSize(800, 600)
@@ -14,6 +16,8 @@ class App(QMainWindow):
         # Shared State
         self.current_user: str | None = None
         self.connector = connector
+        self.factory = DAOFactory(self.connector)
+        self.handler = ReportHandler(self.connector, self.factory)
         
         # Central Widget
         self.stack = QStackedWidget()
