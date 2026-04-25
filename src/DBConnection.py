@@ -91,12 +91,6 @@ class DBConnector:
             credentials = json.load(f)
         return credentials
 
-    def populate_lists(self):
-        self.customer_list = self.get_customer_list()
-        self.alias_list = self.get_customer_alias_list()
-        self.item_list = self.get_item_list()
-        self.location_list = self.get_location_list()
-
     def select_report_by_id(self, _id):
         report_id = _id
         cursor = self.conn.cursor()
@@ -677,7 +671,7 @@ class ReportLineDAO(DAO):
 
 class DAOFactory:
 
-    def __init__(self, db):
+    def __init__(self, db: DBConnector):
         self.db = db
         self.customers = CustomerDAO(db)
         self.customer_aliases = CustomerAliasDAO(db)

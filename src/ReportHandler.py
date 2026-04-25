@@ -164,9 +164,13 @@ class ReportHandler:
         standardized_report.set_info(report_path)
         standardized_report.dataframe = self.fill_empty(self.trim_report(standardized_report.dataframe, report_path))
         return standardized_report
+    
+    def standardize(self, report: Report) -> Report:
+        standardized_report = self.fill_empty(self.trim_report(report.dataframe, report.filePath))
+        return standardized_report
 
     #------------------------------------------------------------------
-    # check_report - checks validity of report being entered
+    # check_report - check validity of report being entered
     #------------------------------------------------------------------
 
     def check_report(self, report) -> tuple[tuple[bool, bool], dict[str, int]]:
