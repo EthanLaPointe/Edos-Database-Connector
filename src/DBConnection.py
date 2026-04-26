@@ -335,15 +335,15 @@ class CustomerAliasDAO(DAO):
         with self.db.cursor() as cursor:
             cursor.execute("INSERT INTO customer_alias (alias, customer_id) VALUES (%s, %s)", (alias.alias, alias.customer_id))
 
-    def create_bulk(self, lines: list[CustomerAlias]) -> None:
+    def create_bulk(self, lines: list[CustomerAlias]) -> bool:
         if not lines:
-            return None
+            return False
 
         values = [(ln.alias, ln.customer_id) for ln in lines]
 
         with self.db.cursor() as cursor:
             psycopg2.extras.execute_values(cursor,"INSERT INTO customer_alias (alias, customer_id) VALUES %s ON CONFLICT DO NOTHING", values, page_size=500)
-            return None
+            return True
 
 
     def delete(self, alias: str) -> None:
