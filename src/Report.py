@@ -11,6 +11,7 @@ class Report:
         self.month = ""
         self.year = ""
         self.dataframe = None
+        self.unknown_aliases = None
 
     def set_info(self, file_path):
         self.filePath = Path(file_path)

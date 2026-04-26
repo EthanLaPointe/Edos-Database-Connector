@@ -3,9 +3,8 @@ from pathlib import Path
 from collections import Counter
 
 from PySide6.QtWidgets import (
-    QWidget, QFrame, QHBoxLayout, QVBoxLayout, QGridLayout,
-    QLabel, QLineEdit, QTextEdit, QPushButton,
-    QComboBox, QRadioButton, QButtonGroup, QScrollArea,
+    QWidget, QFrame, QHBoxLayout, QVBoxLayout,
+    QLabel, QScrollArea, QPushButton,
     QSizePolicy, QMessageBox, QListWidget, QFileDialog,
     QListWidgetItem,
 )
@@ -14,18 +13,14 @@ from PySide6.QtGui import QColor
 from datetime import date
 
 from pages.Sidebar import Sidebar
+from pages.ReportFlagDialog import (
+    ReportFlagDialog,
+    RESULT_CODES, STATUS_COLORS, CODE_TO_STATUS, RESOLVABLE_CODES,
+    ROLE_FILEPATH, ROLE_CODE,
+)
 from src.ReportHandler import ReportHandler
 from src.Report import Report
 from src.DBConnection import *
-
-
-RESULT_CODES = {
-    0: ("Success", "Report inserted successfully.", False),
-    1: ("Manufacturer Unknown", "The manufacturer could not be identified", True),
-    2: ("Unknown Aliases", "Unknown customer aliases were encountered in the report", True),
-    3: ("Report Already Present", "Report for this manufacturer and period already present in database", True),
-    4: ("Insert Cancelled", "Insert operation was cancelled", False),
-}
 
 class InsertWorker(QThread):
     # 0 - Success
@@ -51,8 +46,8 @@ class InsertWorker(QThread):
         
     def _insert_report(self, report: Report) -> int:
         report = self.handler.standardize(report)
-        
         valid = self.handler.check_report(report)
+        
         unknown_list = valid[1]
         manufacturer_exists = valid[0][0]
         report_already_exists = valid[0][1]
@@ -65,6 +60,7 @@ class InsertWorker(QThread):
         elif not manufacturer_exists:
             return 1
         elif len(unknown_list) > 0:
+            report.unknown_aliases = unknown_list
             return 2
 
 class ResultDialog(QMessageBox):
@@ -73,35 +69,13 @@ class ResultDialog(QMessageBox):
         
         title, message, is_warning = RESULT_CODES.get(code, ("Unknown Result", f"Received unexpected code {code}.", True))
         
-        filename = Path(filepath).name
-        
         self.setWindowTitle(f"{title}")
-        self.setText(f"<b>{filename}</b>")
+        self.setText(f"<b>{Path(filepath).name}</b>")
         self.setInformativeText(message)
         self.setStandardButtons(QMessageBox.Ok)
-        
-        if is_warning:
-            self.setIcon(QMessageBox.Warning)
-        else:
-            self.setIcon(QMessageBox.Information)
+        self.setIcon(QMessageBox.Warning if is_warning else QMessageBox.Information)
             
-# File queue list item
-STATUS_COLORS = {
-    "queued":     ("#94a3b8"),
-    "processing": ("#60a5fa"),
-    "success":    ("#22c55e"),
-    "warning":    ("#f59e0b"),
-    "error":      ("#ef4444"),
-}
-
-CODE_TO_STATUS = {
-    0: "success",
-    1: "warning",
-    2: "warning",
-    3: "warning",
-    4: "error",
-}
-
+# Report Page
 class ReportPage(QWidget):
     def __init__(self, controller):
         super().__init__()
@@ -199,7 +173,12 @@ class ReportPage(QWidget):
         
         # Queue List
         layout.addWidget(self._section_label("File Queue"))
-        layout.addSpacing(8)
+        layout.addSpacing(4)
+        
+        hint = QLabel("Click a flagged item to open the resolution panel.")
+        hint.setObjectName("hintLabel")
+        layout.addWidget(hint)
+        layout.addSpacing(6)
         
         list_frame = QFrame()
         list_frame.setObjectName("formSection")
@@ -211,7 +190,9 @@ class ReportPage(QWidget):
         self.file_list.setMinimumHeight(220)
         self.file_list.setSpacing(2)
         self.file_list.setObjectName("fileQueue")
+        self.file_list.itemClicked.connect(self._on_item_clicked)
         list_layout.addWidget(self.file_list)
+        
         layout.addWidget(list_frame)
         layout.addSpacing(24)
         
@@ -268,10 +249,12 @@ class ReportPage(QWidget):
             )
             return
         
+        reports = []
         for path in paths:
             report = Report()
             report.set_info(path)
-            self._add_to_queue([report, ])
+            reports.append(report)
+        self._add_to_queue(reports)
     
     def _add_to_queue(self, reports: list[Report]):
         existing = set(self._queued_reports)
@@ -280,7 +263,7 @@ class ReportPage(QWidget):
             if report not in existing:
                 self._queued_reports.append(report)
                 existing.add(report)
-                self._add_list_item(report, "queued")
+                self._add_list_item(report, "queued", code=None)
                 added += 1
         
         self._update_queue_label()
@@ -288,13 +271,20 @@ class ReportPage(QWidget):
         if added:
             self.submit_btn.setEnabled(True)
             
-    def _add_list_item(self, report: Report, status: str) -> QListWidgetItem:
+    def _add_list_item(self, report: Report, status: str, code: int | None) -> QListWidgetItem:
         color = STATUS_COLORS[status]
         filename = Path(report.filePath).name
         folder = str(Path(report.filePath).parent)
-        item = QListWidgetItem(f"{filename} {folder} -- {status}")
+        label = RESULT_CODES[code][0] if code is not None else status.capitalize()
+        
+        item = QListWidgetItem(f"{filename} - {folder} -- {label}")
         item.setForeground(QColor(color))
-        item.setData(Qt.UserRole, report.filePath)
+        item.setData(ROLE_FILEPATH, str(report.filePath))
+        item.setData(ROLE_CODE, code)
+        
+        if code in RESOLVABLE_CODES:
+            item.setToolTip("Click to resolve")
+        
         self.file_list.addItem(item)
         return item
     
@@ -313,6 +303,55 @@ class ReportPage(QWidget):
         else:
             self.queue_label.setText(f"{n} file(s) queued")
             
+    def _on_item_clicked(self, item: QListWidgetItem):
+        if self.worker and self.worker.isRunning():
+            return
+        
+        code = item.data(ROLE_CODE)
+        if code not in RESOLVABLE_CODES:
+            return
+        
+        filepath = item.data(ROLE_FILEPATH)
+        if filepath is None:
+            return
+        filepath = str(filepath)
+        report = next(
+            (r for r in self._queued_reports if str(r.filePath) == filepath), None
+        )        
+        if report is None:
+            return
+        
+        queue_index = next(
+            (i for i, r in enumerate(self._queued_reports) if str(r.filePath) == filepath), None,
+        )
+        
+        dialog = ReportFlagDialog(
+            parent = self.window(),
+            report = report,
+            code = code,
+            queue_index = queue_index,
+            connector = self.controller.connector,
+        )
+        dialog.retry_done.connect(self._on_flag_resolved)
+        dialog.exec()
+        
+    def _on_flag_resolved(self, queue_index: int, new_code: int):
+        item = self.file_list.item(queue_index)
+        if item is None:
+            return
+        
+        report = self._queued_reports[queue_index]
+        status = CODE_TO_STATUS.get(new_code, "error")
+        color = STATUS_COLORS[status]
+        label = RESULT_CODES.get(new_code, ("Unknown", ))[0]
+        filename = Path(report.filePath).name
+        folder = str(Path(report.filePath).parent)
+        
+        item.setText(f"{filename} - {folder} -- {label}")
+        item.setForeground(QColor(color))
+        item.setData(ROLE_CODE, new_code)
+        item.setToolTip("Click to resolve this flag" if new_code in RESOLVABLE_CODES else "")
+    
     # Insertion
     def _handle_insert(self):
         if not self._queued_reports:
@@ -329,10 +368,10 @@ class ReportPage(QWidget):
         # Mark all items in list as queued/pending
         for i in range(self.file_list.count()):
             item = self.file_list.item(i)
-            color = STATUS_COLORS["queued"]
-            filepath = item.data(Qt.UserRole)
-            item.setText(f"{Path(filepath).name} {str(Path(filepath).parent)}")
-            item.setForeground(QColor(color))
+            filepath = item.data(ROLE_FILEPATH)
+            item.setText(f"{Path(filepath).name} - {str(Path(filepath).parent)} -- Queued")
+            item.setForeground(QColor(STATUS_COLORS["queued"]))
+            item.setData(ROLE_CODE, None)
             
         self.worker = InsertWorker(reports=list(self._queued_reports), connector=self.controller.connector)
         self.worker.file_done.connect(self._on_file_done)
@@ -347,13 +386,15 @@ class ReportPage(QWidget):
         
         status = CODE_TO_STATUS.get(code, "error")
         color = STATUS_COLORS[status]
+        label = RESULT_CODES[code][0]
         
         if item:
             filename = Path(filepath).name
             folder = str(Path(filepath).parent)
-            result_text = RESULT_CODES[code][0]
-            item.setText(f"{filename} {folder} -- {result_text}")
+            item.setText(f"{filename} - {folder} -- {label}")
             item.setForeground(QColor(color))
+            item.setData(ROLE_CODE, code)
+            item.setToolTip("Click to resolve this flag" if code in RESOLVABLE_CODES else "")
             self.file_list.scrollToItem(item)
         
     def _on_all_done(self):
