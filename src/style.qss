@@ -276,6 +276,23 @@ QRadioButton::indicator:checked {
     background-color: #3b82f6;
 }
 
+/* ── File queue list ─────────────────────────────────────────────────────── */
+QListWidget#fileQueue {
+    background-color: transparent;
+    border: none;
+}
+
+QListWidget#fileQueue::item {
+    background-color: #13151f;
+    border-radius: 6px;
+    padding: 8px 12px;
+    /* No color property here — lets setForeground() take effect per item */
+}
+
+QListWidget#fileQueue::item:selected {
+    background-color: #1e2d4d;
+}
+
 /* ── Scroll area ─────────────────────────────────────────────────────────── */
 QScrollArea {
     border: none;

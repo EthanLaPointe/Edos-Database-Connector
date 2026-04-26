@@ -16,8 +16,8 @@ class App(QMainWindow):
         # Shared State
         self.current_user: str | None = None
         self.connector = connector
-        self.factory = DAOFactory(self.connector)
-        self.handler = ReportHandler(self.connector, self.factory)
+        self.factory = None
+        self.handler = None
         
         # Central Widget
         self.stack = QStackedWidget()
@@ -42,6 +42,8 @@ class App(QMainWindow):
             
             if connection_status == 1:
                 self.current_user = self.connector.get_credentials()["user"]
+                self.factory = DAOFactory(self.connector)
+                self.handler = ReportHandler(self.connector, self.factory)
                 self.show_page(self.home_page)
         else:
             self.show_page(self.login_page)

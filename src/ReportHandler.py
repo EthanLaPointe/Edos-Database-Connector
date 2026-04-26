@@ -19,7 +19,6 @@ class ReportHandler:
         self.customer_alias_list = self.dao.customer_aliases.get_all_as_dict() | self.dao.customers.get_all_as_dict()
         self.item_list = self.dao.items.get_all_as_dict()
         self.manufacturer_list = self.dao.manufacturers.get_all_as_dict()
-        print(self.manufacturer_list)
         # List of fields the report must contain
         self.fieldList = ["customername", "city", "state", "stockcode", "productfam", "productdesc", "quantity", "date",
                      "amount", "transfer"]
@@ -158,22 +157,16 @@ class ReportHandler:
         dataframe["quantity"] = np.where((dataframe["amount"] > 0) & (dataframe["quantity"] == 0), None, dataframe["quantity"])
 
         return dataframe
-
-    def standardize(self, report_path) -> Report:
-        standardized_report = Report()
-        standardized_report.set_info(report_path)
-        standardized_report.dataframe = self.fill_empty(self.trim_report(standardized_report.dataframe, report_path))
-        return standardized_report
     
     def standardize(self, report: Report) -> Report:
-        standardized_report = self.fill_empty(self.trim_report(report.dataframe, report.filePath))
-        return standardized_report
+        report.dataframe = self.fill_empty(self.trim_report(report.dataframe, report.filePath))
+        return report
 
     #------------------------------------------------------------------
     # check_report - check validity of report being entered
     #------------------------------------------------------------------
 
-    def check_report(self, report) -> tuple[tuple[bool, bool], dict[str, int]]:
+    def check_report(self, report: Report) -> tuple[tuple[bool, bool], dict[str, int]]:
         unknown_list = {}
         valid_manufacturer = False
         already_present = False
