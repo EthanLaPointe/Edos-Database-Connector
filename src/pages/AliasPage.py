@@ -1,4 +1,5 @@
 from pathlib import Path
+import csv
 
 from PySide6.QtWidgets import(
     QWidget, QFrame, QHBoxLayout, QVBoxLayout,
@@ -11,6 +12,11 @@ from PySide6.QtGui import QColor
 
 from pages.Sidebar import Sidebar
 from src.DBConnection import *
+
+# Table Column Indices
+COL_ALIAS = 0
+COL_CUSTOMER = 1
+COL_STATUS = 2
 
 STATUS_COLORS = {
     "pending": "#94a3b8",
@@ -97,5 +103,117 @@ class AliasPage(QWidget):
         layout.addSpacing(28)
         
         # File Selection
+        layout.addWidget(self._section_label("Select File"))
+        layout.addSpacing(8)
+        
+        file_frame = QFrame()
+        file_frame.setObjectName("formSection")
+        file_layout = QVBoxLayout(file_frame)
+        file_layout.setContentsMargins(20, 20, 20, 20)
+        file_layout.setSpacing(12)
+        
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+        
+        self.choose_btn = QPushButton("Choose CSV File")
+        self.choose_btn.setMinimumHeight(42)
+        self.choose_btn.setCursor(Qt.PointingHandCursor)
+        self.choose_btn.clicked.connect(self._choose_file)
+        btn_row.addWidget(self.choose_btn)
+        
+        btn_row.addStretch
+        
+        self.clear_btn = QPushButton("Clear")
+        self.clear_btn.setObjectName("cancelBtn")
+        self.clear_btn.setMinimumHeight(42)
+        self.clear_btn.setCursor(Qt.PointingHandCursor)
+        self.clear_btn.setEnabled(False)
+        self.clear_btn.clicked.connect(self._clear)
+        btn_row.addWidget(self.clear_btn)
+        
+        file_layout.addLayout(btn_row)
+        
+        self.file_label = QLabel("No file selected.")
+        self.file_label.setObjectName("subtitle")
+        file_layout.addWidget(self.file_label)
+        
+        layout.addWidget(file_frame)
+        layout.addSpacing(24)
+        
+        # Preview Table
+        layout.addWidget(self._section_label("Mapping Preview"))
+        layout.addSpacing(4)
+        
+        hint = QLabel("Two-column CSV: first column alias, second column customer name.")
+        hint.setObjectName("hintLabel")
+        layout.addWidget(hint)
+        layout.addSpacing(6)
+        
+        table_frame = QFrame()
+        table_frame.setObjectName("formSection")
+        table_layout = QVBoxLayout(table_frame)
+        table_layout.setContentsMargins(16, 16, 16, 16)
+        
+        self.table = QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels(["Alias", "Customer Name", "Status"])
+        self.table.horizontalHeader().setSectionResizeMode(COL_ALIAS, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(COL_CUSTOMER, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(COL_STATUS, QHeaderView.ResizeToContents)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setEditTriggers(QAbstractItemView.SelectRows)
+        self.table.setMinimumHeight(260)
+        self.table.setObjectName("aliasTable")
+        table_layout.addWidget(self.table)
+        
+        layout.addWidget(table_frame)
+        layout.addSpacing(24)
+        
+        # Submit Row
+        submit_row = QHBoxLayout()
+        submit_row.addStretch()
+        
+        self.insert_btn = QPushButton("Insert Mappings")
+        self.insert_btn.setMinimumSize(180, 44)
+        self.insert_btn.setCursor(Qt.PointingHandCursor)
+        self.insert_btn.setEnabled(False)
+        self.insert_btn.clicked.connect(self._handle_insert)
+        submit_row.addWidget(self.insert_btn)
+        
+        layout.addLayout(submit_row)
+        layout.addStretch()
+        
+    # File Selection & Parsing
+    def _choose_file(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Alias CSV", "", "CSV Files (*.csv);;All FIles (*)"
+        )
+        if not path:
+            return
+        
+        mappings, error = self._parse_csv(path)
+        if error:
+            QMessageBox.warning(self, "Invalid File", error)
+            return
+        
+        self._mappings = mappings
+        self.file_label.setText(f"{Path(path).name} - {len(mappings)} mapping(s) found")
+        self._populate_table(mappings)
+        self.clear_btn.setEnabled(True)
+        self.insert_btn.setEnable(True)
+        
+    # TODO move csv parsing to report handler
+    def _parse_csv(self, path: str) -> tuple[list[tuple[str, str]], str | None]:
+        # Returns (mappings, error_message)
+        # Accepts files with or without a header row.
+        
+        try:
+            with open(path, newline="", encoding="utf-8-sig") as f:
+                reader = csv.reader(f)
+                rows = [row for row in reader if any(cell.strip() for cell in row)]
+        except Exception as e:
+            return [], f"Could not read file: {e}"
+        
+        if not rows:
+            return [], "The file is empty."
         
         
