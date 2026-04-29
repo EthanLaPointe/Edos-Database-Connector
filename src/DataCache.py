@@ -11,6 +11,6 @@ class DataCache:
         
     def refresh(self):
         self.locations = self._factory.locations.get_all_as_dict()
-        self.customer_aliases = (self._factory.customer_aliases.get_all_as_dict() | self._dao.customers.get_all_as_dict())
+        self.customer_aliases = (self._factory.customer_aliases.get_all_as_dict() | self._factory.customers.get_all_as_dict())
         self.items = self._factory.items.get_all_as_dict()
         self.manufacturers = self._factory.manufacturers.get_all_as_dict()

@@ -160,7 +160,8 @@ class AliasPage(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(COL_CUSTOMER, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(COL_STATUS, QHeaderView.ResizeToContents)
         self.table.verticalHeader().setVisible(False)
-        self.table.setEditTriggers(QAbstractItemView.SelectRows)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setMinimumHeight(260)
         self.table.setObjectName("aliasTable")
         table_layout.addWidget(self.table)
@@ -190,7 +191,10 @@ class AliasPage(QWidget):
         if not path:
             return
         
-        mappings, error = self._parse_csv(path)
+        #mappings, error = self._parse_csv(path)
+        mappings = ("testAlias", "testCustomer")
+        error = None
+        
         if error:
             QMessageBox.warning(self, "Invalid File", error)
             return
@@ -203,4 +207,82 @@ class AliasPage(QWidget):
         
     # TODO move csv parsing to report handler
         
+    # Table
+    def _populate_table(self, mappings: list[tuple[str, str]]):
+        self.table.setRowCount(0)
+        for alias, customer in mappings:
+            row = self.table.rowCount()
+            self.table.insertRow(row)
+            self.table.setItem(row, COL_ALIAS, QTableWidgetItem(alias))
+            self.table.setItem(row, COL_CUSTOMER, QTableWidgetItem(customer))
+            status_item = QTableWidgetItem("Pending")
+            status_item.setForeground(QColor(STATUS_COLORS["pending"]))
+            self.table.setItem(row, COL_STATUS, status_item)
+            
+    def _set_row_status(self, row: int, code: int):
+        labels = {0: "Inserted", 1: "Duplicate", 2: "Customer Not Found", 3: "Error"}
+        keys = {0: "success", 1: "duplicate", 2: "error", 3: "error"}
+        text = labels.get(code, "Unknown")
+        color = STATUS_COLORS.get(keys.get(code, "error"), "#ef4444")
         
+        item = QTableWidgetItem(text)
+        item.setForeground(QColor(color))
+        self.table.setItem(row, COL_STATUS, item)
+        self.table.scrollToItem(item)
+        
+    # Clear    
+    def _clear(self):
+        if self.worker and self.worker.isRunning():
+            return
+        self._mappings.clear()
+        self.table.setRowCount(0)
+        self.file_label.setText("No file selected.")
+        self.clear_btn.setEnabled(False)
+        self.insert_btn.setEnabled(False)
+        
+    # Insert
+    def _handle_insert(self):
+        pass
+    
+    def _on_row_done(self, row: int, code: int):
+        self._set_row_status(row, code)
+        
+    def _on_all_done(self):
+        self._lock_ui(False)
+        
+        inserted = sum(1 for r in range(self.table.rowCount()) if self.table.item(r, COL_STATUS).text() == "Inserted")
+        duplicates = sum(1 for r in range(self.table.rowCount()) if self.table.item(r, COL_STATUS).text() == "Duplicate")
+        errors = self.table.rowCount() - inserted - duplicates
+        
+        lines = []
+        if inserted:
+            lines.append(f"{inserted} mapping(s) inserted successfully")
+        if duplicates:
+            lines.append(f"{duplicates} skipped (already mapped)")
+        if errors:
+            lines.append(f"{errors} failed")
+            
+        has_issues = duplicates or errors
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Insert Complete")
+        msg.setIcon(QMessageBox.Warning if has_issues else QMessageBox.Information)
+        msg.setText(f"Processed {self.table.rowCount()} mapping(s).")
+        msg.setInformativeText("\n".join(lines))
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.exec()
+        
+    # Helpers
+    def _lock_ui(self, locked: bool):
+        self.choose_btn.setEnabled(not locked)
+        self.clear_btn.setEnabled(not locked)
+        self.insert_btn.setEnabled(not locked)
+        self.insert_btn.setText("Inserting..." if locked else "Insert Mappings")
+        
+    def _section_label(self, text: str) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setObjectName("sectionTitle")
+        return lbl
+    
+    def on_show(self):
+        user = self.controller.current_user or "User"
+        self.sidebar.update_user(user)
