@@ -58,7 +58,7 @@ class ReportFlagDialog(QDialog):
         self.connector = connector
         self._factory = factory
         self._handler = ReportHandler(connector, self._factory)
-        self.cache = DataCache
+        self.cache = cache
         self.cache.refresh()
         self._resolution_panel = None
         self._status_lbl = None
@@ -171,7 +171,7 @@ class ReportFlagDialog(QDialog):
         try:
             manufacturer = self._factory.manufacturers.create(Manufacturer(manufacturer_id=None, manufacturer_name=name))
             if manufacturer.manufacturer_name == self.report.manufacturerName:
-                self.cache.refresh()
+                self.cache.manufacturers[manufacturer.name] = manufacturer.manufacturer_id
                 self._retry_insert()
             else:
                 print("names do not match")
@@ -236,9 +236,9 @@ class ReportFlagDialog(QDialog):
         
     def _add_new_customer(self, cust_name: str):
         try: 
-            self._factory.customers.create(Customer(customer_id=None, customer_name=cust_name))
-            self._show_status(f"{cust_name} successfully added as a new customer", error=False)
-            self.cache.refresh()
+            customer = self._factory.customers.create(Customer(customer_id=None, customer_name=cust_name))
+            self._show_status(f"{customer.customer_name} successfully added as a new customer", error=False)
+            self.cache.customer_aliases[customer.customer_name] = customer.customer_id
         except Exception as e:
             self._show_status(f"Failed to insert new customer: {e}", error=True)
         
@@ -248,7 +248,7 @@ class ReportFlagDialog(QDialog):
                 customer = self._factory.customers.create(Customer(customer_id=None, customer_name=alias))
                 self._show_status(f"{customer.customer_name} successfully added as new customer", error=False)
                 self._alias_inputs.pop(alias)
-                self.cache.refresh()
+                self.cache.customer_aliases[customer.customer_name] = customer.customer_id
             except Exception as e:
                 self._show_status(f"Failed to insert new customer: {e}", error=True)
         
@@ -263,9 +263,6 @@ class ReportFlagDialog(QDialog):
             )
             return
         try:
-            # TODO: add alias mappings to database
-            # Update lists
-            # Retry insert
             alias_list: list[CustomerAlias] = [] 
             for alias, customer in mappings.items():
                 customer_id = self._factory.customers.get_by_name(customer).customer_id
@@ -275,7 +272,6 @@ class ReportFlagDialog(QDialog):
             success = self._factory.customer_aliases.create_bulk(alias_list)
             if(success):
                 self.cache.refresh()
-            
                 self._retry_insert()
             else:
                 raise ValueError("Aliases failed to insert.")

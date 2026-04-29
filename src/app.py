@@ -45,7 +45,7 @@ class App(QMainWindow):
                 self.login_page._show_error(e)
             
             if connection_status == 1:
-                self.login = self.connector.get_credentials()["user"]
+                self.login(self.connector.get_credentials()["user"])
         else:
             self.show_page(self.login_page)
         
@@ -58,8 +58,8 @@ class App(QMainWindow):
     def login(self, username: str):
         self.current_user = username
         self.factory = DAOFactory(self.connector)
-        self.handler = ReportHandler(self.connector, self.factory)
         self.cache = DataCache(self.factory)
+        self.handler = ReportHandler(self.connector, self.factory, self.cache)
         self.show_home()
         
     def logout(self):
@@ -71,6 +71,9 @@ class App(QMainWindow):
         
     def show_report(self):
         self.show_page(self.report_page)
+        
+    def show_alias(self):
+        self.show_page(self.alias_page)
         
         
         
