@@ -11,6 +11,7 @@ from PySide6.QtGui import QColor, QFont
  
 from src.ReportHandler import ReportHandler
 from src.Report import Report
+from DataCache import DataCache
 from src.DBConnection import *
 
 # Shared Constants
@@ -49,15 +50,16 @@ class ReportFlagDialog(QDialog):
     # Emitted after successful retry
     retry_done = Signal(int, int) # (queue_index, new_code)
     
-    def __init__(self, parent: QWidget, report: Report, code: int, queue_index: int, connector: DBConnector,):
+    def __init__(self, parent: QWidget, report: Report, code: int, queue_index: int, connector: DBConnector, cache: DataCache, factory: DAOFactory):
         super().__init__(parent)
         self.report = report
         self.code = code
         self.queue_index = queue_index
         self.connector = connector
-        self._factory = DAOFactory(connector)
+        self._factory = factory
         self._handler = ReportHandler(connector, self._factory)
-        self._handler.update_lists()
+        self.cache = DataCache
+        self.cache.refresh()
         self._resolution_panel = None
         self._status_lbl = None
         self._mfr_input = None
@@ -169,7 +171,7 @@ class ReportFlagDialog(QDialog):
         try:
             manufacturer = self._factory.manufacturers.create(Manufacturer(manufacturer_id=None, manufacturer_name=name))
             if manufacturer.manufacturer_name == self.report.manufacturerName:
-                self._handler.update_lists()
+                self.cache.refresh()
                 self._retry_insert()
             else:
                 print("names do not match")
@@ -236,7 +238,7 @@ class ReportFlagDialog(QDialog):
         try: 
             self._factory.customers.create(Customer(customer_id=None, customer_name=cust_name))
             self._show_status(f"{cust_name} successfully added as a new customer", error=False)
-            self._handler.update_lists()
+            self.cache.refresh()
         except Exception as e:
             self._show_status(f"Failed to insert new customer: {e}", error=True)
         
@@ -246,6 +248,7 @@ class ReportFlagDialog(QDialog):
                 customer = self._factory.customers.create(Customer(customer_id=None, customer_name=alias))
                 self._show_status(f"{customer.customer_name} successfully added as new customer", error=False)
                 self._alias_inputs.pop(alias)
+                self.cache.refresh()
             except Exception as e:
                 self._show_status(f"Failed to insert new customer: {e}", error=True)
         
@@ -271,7 +274,7 @@ class ReportFlagDialog(QDialog):
                 
             success = self._factory.customer_aliases.create_bulk(alias_list)
             if(success):
-                self._handler.update_lists()
+                self.cache.refresh()
             
                 self._retry_insert()
             else:
