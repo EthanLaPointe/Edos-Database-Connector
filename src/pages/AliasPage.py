@@ -37,11 +37,11 @@ class AliasInsertWorker(QThread):
     row_done = Signal(int, int)
     all_done = Signal()
     
-    def __init__(self, mappings: list[tuple[str, str]], connector: DBConnector,):
+    def __init__(self, mappings: list[tuple[str, str]], connector: DBConnector, factory: DAOFactory):
         super().__init__()
         self.mappings = mappings
         self.connector = connector
-        self._factory = DAOFactory(connector)
+        self._factory = factory
         
     def run(self):
         for i, (alias, customer) in enumerate(self.mappings):
@@ -202,18 +202,5 @@ class AliasPage(QWidget):
         self.insert_btn.setEnable(True)
         
     # TODO move csv parsing to report handler
-    def _parse_csv(self, path: str) -> tuple[list[tuple[str, str]], str | None]:
-        # Returns (mappings, error_message)
-        # Accepts files with or without a header row.
-        
-        try:
-            with open(path, newline="", encoding="utf-8-sig") as f:
-                reader = csv.reader(f)
-                rows = [row for row in reader if any(cell.strip() for cell in row)]
-        except Exception as e:
-            return [], f"Could not read file: {e}"
-        
-        if not rows:
-            return [], "The file is empty."
         
         

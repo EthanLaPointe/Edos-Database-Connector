@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from Report import Report
 from DBConnection import *
+from DataCache import DataCache
 from decimal import Decimal
 import psycopg2.extras
 
@@ -12,22 +13,14 @@ pd.set_option('display.width', None)
 
 class ReportHandler:
 
-    def __init__(self, db_connector: DBConnector, dao_factory: DAOFactory):
+    def __init__(self, db_connector: DBConnector, dao_factory: DAOFactory, data_cache: DataCache):
         self.db = db_connector
         self.dao = dao_factory
-        self.location_list = self.dao.locations.get_all_as_dict()
-        self.customer_alias_list = self.dao.customer_aliases.get_all_as_dict() | self.dao.customers.get_all_as_dict()
-        self.item_list = self.dao.items.get_all_as_dict()
-        self.manufacturer_list = self.dao.manufacturers.get_all_as_dict()
+        self.cache = data_cache
+
         # List of fields the report must contain
         self.fieldList = ["customername", "city", "state", "stockcode", "productfam", "productdesc", "quantity", "date",
                      "amount", "transfer"]
-
-    def update_lists(self):
-        self.location_list = self.dao.locations.get_all_as_dict()
-        self.customer_alias_list = self.dao.customer_aliases.get_all_as_dict() | self.dao.customers.get_all_as_dict()
-        self.item_list = self.dao.items.get_all_as_dict()
-        self.manufacturer_list = self.dao.manufacturers.get_all_as_dict()
 
     def insert_report(self, report) -> None:
         # dict to store row information
@@ -35,11 +28,9 @@ class ReportHandler:
         line_data = {"customername": '', "city": '', "state": '', "stockcode": '', "productfamily": '', "productdesc": '',
                      "quantity": 0, "saledate": None, "amount": 0.0, "transfer": ''}
 
-        # insert manufacturer name and check if present already
+        # Use report manufacturer name to get manufacturer DAO
         manufacturer = self.dao.manufacturers.get_by_name(report.manufacturerName)
-        if not manufacturer:
-            manufacturer = self.dao.manufacturers.create(Manufacturer(manufacturer_id = None, manufacturer_name = report.manufacturerName))
-
+        
         try:
             sales_report = SalesReport(report_id= None, manufacturer_id= manufacturer.manufacturer_id, report_year= report.year, report_month= report.month)
             sales_report = self.dao.sales_reports.create(sales_report)
@@ -68,14 +59,14 @@ class ReportHandler:
             line_data["transfer"] = row[9]
 
             # retrieve customer_id from list
-            customer_id = self.customer_alias_list[line_data["customername"]]
+            customer_id = self.cache.customer_aliases[line_data["customername"]]
 
             # insert location
-            if (line_data["city"], line_data["state"]) in self.location_list:
-                location_id = self.location_list[(line_data["city"], line_data["state"])]
+            if (line_data["city"], line_data["state"]) in self.cache.locations:
+                location_id = self.cache.locations[(line_data["city"], line_data["state"])]
             else:
                 location_id = self.dao.locations.create(Location(location_id = None, city = line_data["city"], state = line_data["state"])).location_id
-                self.location_list[(line_data["city"], line_data["state"])] = location_id
+                self.cache.locations[(line_data["city"], line_data["state"])] = location_id
 
             # save each customer location to a list of CustomerLocation
             customer_location = CustomerLocation(customer_id = customer_id, location_id = location_id)
@@ -86,11 +77,11 @@ class ReportHandler:
             sale_customer_list.append(sale_customer)
 
             # insert item
-            if line_data["stockcode"] in self.item_list:
-                item_id = self.item_list[line_data["stockcode"]]
+            if line_data["stockcode"] in self.cache.items:
+                item_id = self.cache.items[line_data["stockcode"]]
             else:
                 item_id = self.dao.items.create(Item(item_id = None, stockcode = line_data["stockcode"], product_family = line_data["productfamily"], product_description = line_data["productdesc"])).item_id
-                self.item_list[line_data["stockcode"]] = item_id
+                self.cache.items[line_data["stockcode"]] = item_id
 
             # save each line of report to a list of ReportLine
             line = ReportLine(report_line_id = None, report_id = sales_report.report_id, customer_alias= line_data["customername"], customer_id = customer_id, item_id = item_id, location_id = location_id, quantity = line_data["quantity"],
@@ -170,18 +161,17 @@ class ReportHandler:
         unknown_list = {}
         valid_manufacturer = False
         already_present = False
-        manufacturer = None
+        manufacturer_id = self.cache.manufacturers[report.manufacturerName] | None
 
         # check if manufacturer on report exists in database
         # if exists then check if a report already exists for that manufacturer during the report period
-        if report.manufacturerName in self.manufacturer_list:
+        if manufacturer_id is not None:
             valid_manufacturer = True
-            manufacturer = self.dao.manufacturers.get_by_name(report.manufacturerName)
-            already_present = self.dao.sales_reports.check_exists(manufacturer.manufacturer_id, report.year,report.month)
+            already_present = self.dao.sales_reports.check_exists(manufacturer_id, report.year,report.month)
 
         # Add each unique unknown name to the unknown_list
         for name in report.dataframe["customername"]:
-            if name not in self.customer_alias_list:
+            if name not in self.cache.customer_aliases:
                 unknown_list[name] = 0
 
         return (valid_manufacturer, already_present), unknown_list

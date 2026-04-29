@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QColor
-from datetime import date
 
 from pages.Sidebar import Sidebar
 from pages.ReportFlagDialog import (
@@ -21,6 +20,7 @@ from pages.ReportFlagDialog import (
 from src.ReportHandler import ReportHandler
 from src.Report import Report
 from src.DBConnection import *
+from DataCache import DataCache
 
 class InsertWorker(QThread):
     # 0 - Success
@@ -31,22 +31,30 @@ class InsertWorker(QThread):
     file_done = Signal(int, int)
     all_done = Signal()
     
-    def __init__(self, reports: list[Report] = None, connector: DBConnector = None):
+    def __init__(self, reports: list[Report], cache: DataCache):
         super().__init__()
-        self.factory = DAOFactory(connector)
         self.reports = reports
-        self.handler = ReportHandler(connector, self.factory)
-        self.handler.update_lists()
+        self.cache = cache
+        self._connector = None
         
     def run(self):
-        for i, report in enumerate(self.reports):
-            code = self._insert_report(report)
-            self.file_done.emit(i, code)
-        self.all_done.emit()
+        self._connector = DBConnector()
+        self._connector.connect()
+        factory = DAOFactory(self._connector)
+        handler = ReportHandler(self._connector, factory, self.cache)
         
-    def _insert_report(self, report: Report) -> int:
-        report = self.handler.standardize(report)
-        valid = self.handler.check_report(report)
+        try:
+            for i, report in enumerate(self.reports):
+                code = self._insert_report(handler, report)
+                self.file_done.emit(i, code)
+            self.all_done.emit()
+        finally:
+            self._connector.close()
+        
+    def _insert_report(self, handler: ReportHandler, report: Report) -> int:
+        handler = handler
+        report = handler.standardize(report)
+        valid = handler.check_report(report)
         
         unknown_list = valid[1]
         manufacturer_exists = valid[0][0]
@@ -55,7 +63,7 @@ class InsertWorker(QThread):
         if (report_already_exists):
             return 3
         if (manufacturer_exists) and len(unknown_list) == 0:
-            self.handler.insert_report(report)
+            handler.insert_report(report)
             return 0
         elif not manufacturer_exists:
             return 1
@@ -331,6 +339,8 @@ class ReportPage(QWidget):
             code = code,
             queue_index = queue_index,
             connector = self.controller.connector,
+            cache= self.controller.cache,
+            factory= self.controller.factory
         )
         dialog.retry_done.connect(self._on_flag_resolved)
         dialog.exec()
@@ -373,7 +383,7 @@ class ReportPage(QWidget):
             item.setForeground(QColor(STATUS_COLORS["queued"]))
             item.setData(ROLE_CODE, None)
             
-        self.worker = InsertWorker(reports=list(self._queued_reports), connector=self.controller.connector)
+        self.worker = InsertWorker(reports=list(self._queued_reports), cache= self.controller.cache)
         self.worker.file_done.connect(self._on_file_done)
         self.worker.all_done.connect(self._on_all_done)
         self.worker.start()
