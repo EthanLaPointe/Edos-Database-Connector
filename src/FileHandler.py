@@ -5,24 +5,26 @@ from Report import Report
 from DBConnection import *
 from DataCache import DataCache
 from decimal import Decimal
+from pathlib import Path
 import psycopg2.extras
 
-pd.set_option('display.max_columns', None)
-pd.set_option('display.max_rows', None)
-pd.set_option('display.width', None)
+# List of fields a report must contain
+REPORT_FIELD_LIST = ["customername", "city", "state", "stockcode", "productfam", "productdesc", "quantity", "saledate",
+                     "amount", "transfer"]
 
-class ReportHandler:
+# List of fields an alias mapping list must contain
+MAPPING_FIELD_LIST = ["alias", "parent"]
 
-    def __init__(self, db_connector: DBConnector, dao_factory: DAOFactory, data_cache: DataCache):
-        self.db = db_connector
+# Status codes for individual mappings
+MAPPING_CODES = {"valid": 0, "duplicate alias": 2, "unknown customer": 1}
+
+class FileHandler:
+
+    def __init__(self, dao_factory: DAOFactory, data_cache: DataCache):
         self.dao = dao_factory
         self.cache = data_cache
 
-        # List of fields the report must contain
-        self.fieldList = ["customername", "city", "state", "stockcode", "productfam", "productdesc", "quantity", "date",
-                     "amount", "transfer"]
-
-    def insert_report(self, report) -> None:
+    def insert_report(self, report: Report) -> None:
         # dict to store row information
         # column index for row matches line_data, i.e. line_data["customer"] = row[0]
         line_data = {"customername": '', "city": '', "state": '', "stockcode": '', "productfamily": '', "productdesc": '',
@@ -30,11 +32,11 @@ class ReportHandler:
 
         # Use report manufacturer name to get manufacturer DAO
         manufacturer = self.dao.manufacturers.get_by_name(report.manufacturerName)
-        
+            
         try:
             sales_report = SalesReport(report_id= None, manufacturer_id= manufacturer.manufacturer_id, report_year= report.year, report_month= report.month)
             sales_report = self.dao.sales_reports.create(sales_report)
-
+                
         except psycopg2.Error as insert_exception:
             print("Failed to insert sales report. Error: ", insert_exception)
             return
@@ -93,6 +95,7 @@ class ReportHandler:
         self.dao.sale_customers.create_bulk(sale_customer_list)
         self.dao.report_lines.create_bulk(report_line_list)
 
+    # TODO look into changing to use dataframes header row instead of reading file a second time
     def trim_report(self, dataframe, file_path) -> pd.DataFrame:
         fields_to_keep = []
         with open(file_path) as csv_file:
@@ -100,7 +103,7 @@ class ReportHandler:
             header = next(csv_reader)
 
         #Check column numbers for each desired field
-        for field in self.fieldList:
+        for field in REPORT_FIELD_LIST:
             for idx, col in enumerate(header):
                 if field in col.lower():
                     fields_to_keep.append(idx)
@@ -113,7 +116,7 @@ class ReportHandler:
     def fill_empty(self, dataframe) -> pd.DataFrame:
         #Loop through desired fields
         header_locations = []
-        for field in self.fieldList:
+        for field in REPORT_FIELD_LIST:
             field_found = False
             #Check if field is present in header row
             for idx, col in enumerate(dataframe.columns):
@@ -128,12 +131,11 @@ class ReportHandler:
                 #print("inserting: ", field)
                 dataframe.insert(loc=header_locations[-1] + 1, column=field, value=np.nan)
         #Update column names to match field list
-        dataframe.columns = self.fieldList
+        dataframe.columns = REPORT_FIELD_LIST
         dataframe = dataframe.map(lambda s: s.lower() if isinstance(s, str) else s)
         #Change instances of nan to proper datatypes in each col
-        dataframe["quantity"] = dataframe["quantity"].fillna(0).astype(float).astype(int)
-        #trimmed_df["quantity"] = np.where((trimmed_df["quantity"] == np.nan) & trimmed_df["amount"] <= 0, 0, trimmed_df["quantity"])
-        dataframe["date"] = dataframe["date"].fillna(None)
+        dataframe["quantity"] = dataframe["quantity"].fillna(0).astype(str).str.replace(r'[$,)#]', '', regex=True).str.strip().astype(float).astype(int)
+        dataframe["saledate"] = dataframe["saledate"].fillna(None)
         #Strip whitespace from city, state
         dataframe["city"] = dataframe["city"].astype(str).str.strip()
         dataframe["state"] = dataframe["state"].astype(str).str.strip()
@@ -146,10 +148,10 @@ class ReportHandler:
         #Remove any rows where amount is 0 & set quantity to null if it = 0 where amount is > 0
         dataframe = dataframe[dataframe["amount"] != 0.0]
         dataframe["quantity"] = np.where((dataframe["amount"] > 0) & (dataframe["quantity"] == 0), None, dataframe["quantity"])
-
+        
         return dataframe
     
-    def standardize(self, report: Report) -> Report:
+    def standardize_report(self, report: Report) -> Report:
         report.dataframe = self.fill_empty(self.trim_report(report.dataframe, report.filePath))
         return report
 
@@ -175,4 +177,54 @@ class ReportHandler:
                 unknown_list[name] = 0
 
         return (valid_manufacturer, already_present), unknown_list
+    
+    def read_mappings(self, file_path: str) -> pd.DataFrame:
+        file_path = Path(file_path)
+        mappings = pd.read_csv(file_path, encoding='latin-1').astype(str)
+        return mappings
+    
+    def check_mappings(self, dataframe: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
+        
+        valid_columns = False
+        column_list = list(map(lambda x: x.lower(), dataframe.columns.tolist()))
+        print(column_list)
+        
+        fields_to_keep = []
+
+        #Check column numbers for each desired field
+        for field in MAPPING_FIELD_LIST:
+            for idx, col in enumerate(column_list):
+                if field in col.lower():
+                    fields_to_keep.append(idx)
+                    break
+
+        #Trim DF to only contain desired columns
+        dataframe = dataframe.iloc[:, fields_to_keep]
+        dataframe.columns = MAPPING_FIELD_LIST
+        column_list = list(map(lambda x: x.lower(), dataframe.columns.tolist()))
+
+        if MAPPING_FIELD_LIST[0] in column_list and MAPPING_FIELD_LIST[1] in column_list:
+            valid_columns = True
+            self.cache.refresh()
+            # TODO change np.where to row by row check for status
+            dataframe.insert(loc=len(dataframe.columns), column="status", value=np.nan)
+            dataframe["status"] = np.where(dataframe["parent"] in self.cache.customer_aliases, MAPPING_CODES["valid"], MAPPING_CODES["unknown customer"])
+            dataframe["status"] = np.where(dataframe["alias"] in self.cache.customer_aliases, MAPPING_CODES["duplicate alias"], MAPPING_CODES["valid"])
+        
+        return (dataframe, valid_columns)
+    
+    def insert_alias_mappings(self, dataframe: pd.DataFrame) -> bool:
+        mappings_to_insert = []
+        for row in dataframe.itertuples(index=False):
+            customer_id = self.cache.customer_aliases[row[1]]
+            alias = row[0]
+            mapping = CustomerAlias(alias=alias, customer_id=customer_id)
+            mappings_to_insert.append(mapping)
+        
+        success = self.dao.customer_aliases.create_bulk(mappings_to_insert)
+        
+        return success
+        
+        
+        
 

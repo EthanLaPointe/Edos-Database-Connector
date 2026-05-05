@@ -1,8 +1,9 @@
 import psycopg2
 
-from ReportHandler import ReportHandler
+from src.FileHandler import FileHandler
 from Report import Report
 from DBConnection import *
+from DataCache import DataCache
 import pandas as pd
 import glob
 import traceback
@@ -19,7 +20,7 @@ def print_report(rld: ReportLineDAO, _id: int):
 def insert_report(report_path: str) -> bool:
     inserted = False
     print("Standardizing: " + report_path + "...")
-    report = handler.standardize(report_path)
+    report = handler.standardize_report(report_path)
     print("Checking: " + report_path + "...")
     valid = handler.check_report(report)
     unknown_list = valid[1]
@@ -81,6 +82,20 @@ def insert_report(report_path: str) -> bool:
         print("Report already exists for", report.manufacturerName, " during the period", report.month, ",", report.year)
     return inserted
 
+def insert_report_no_check(report_path: str) -> bool:
+    inserted = False
+    print("Standardizing: " + report_path + "...")
+    report = Report()
+    report.set_info(report_path)
+    report = handler.standardize_report(report)
+
+    print("Inserting: " + report_path + "...")
+    #print(report.dataframe)
+    handler.insert_report(report)
+    inserted = True
+
+    return inserted
+
 connector = DBConnector()
 connectionStatus = 0
 
@@ -117,7 +132,8 @@ try:
                 sys.exit()
     print("Connection to database successful")
     dao = DAOFactory(connector)
-    handler = ReportHandler(connector, dao)
+    cache = DataCache(dao)
+    handler = FileHandler(connector, dao, cache)
     choice = 0
 
     while choice != 3:
@@ -151,7 +167,7 @@ try:
 
             if len(csvList) > 0:
                 for csv_file in csvList:
-                    report_inserted = insert_report(csv_file.replace('\\', '/'))
+                    report_inserted = insert_report_no_check(csv_file.replace('\\', '/'))
             else:
                 print("Entered folder does not contain any .csv files")
 
@@ -164,7 +180,7 @@ try:
             reportPath = (input().replace('\\', '/'))
             if reportPath[0] == '"':
                 reportPath = reportPath[1:-1]
-            report = handler.standardize(reportPath)
+            report = handler.standardize_report(reportPath)
             print("Standardized report:\n")
             print(report.dataframe)
 
