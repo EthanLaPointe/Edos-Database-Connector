@@ -17,7 +17,7 @@ from pages.ReportFlagDialog import (
     RESULT_CODES, STATUS_COLORS, CODE_TO_STATUS, RESOLVABLE_CODES,
     ROLE_FILEPATH, ROLE_CODE,
 )
-from src.ReportHandler import ReportHandler
+from src.FileHandler import FileHandler
 from src.Report import Report
 from src.DBConnection import *
 from DataCache import DataCache
@@ -41,7 +41,7 @@ class InsertWorker(QThread):
         self._connector = DBConnector()
         self._connector.connect()
         factory = DAOFactory(self._connector)
-        handler = ReportHandler(self._connector, factory, self.cache)
+        handler = FileHandler(factory, self.cache)
         
         try:
             for i, report in enumerate(self.reports):
@@ -51,9 +51,9 @@ class InsertWorker(QThread):
         finally:
             self._connector.close()
         
-    def _insert_report(self, handler: ReportHandler, report: Report) -> int:
+    def _insert_report(self, handler: FileHandler, report: Report) -> int:
         handler = handler
-        report = handler.standardize(report)
+        report = handler.standardize_report(report)
         valid = handler.check_report(report)
         
         unknown_list = valid[1]

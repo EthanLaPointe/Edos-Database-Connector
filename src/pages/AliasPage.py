@@ -1,5 +1,6 @@
 from pathlib import Path
 import csv
+import pandas as pd
 
 from PySide6.QtWidgets import(
     QWidget, QFrame, QHBoxLayout, QVBoxLayout,
@@ -12,6 +13,8 @@ from PySide6.QtGui import QColor
 
 from pages.Sidebar import Sidebar
 from src.DBConnection import *
+from FileHandler import FileHandler
+from DataCache import DataCache
 
 # Table Column Indices
 COL_ALIAS = 0
@@ -27,21 +30,32 @@ STATUS_COLORS = {
 
 # Insert Worker
 
-class AliasInsertWorker(QThread):
+class AliasWorker(QThread):
     # Signals:
     #   0 - inserted successfully
     #   1 - alias already mapped (duplicate)
     #   2 - customer not found in database
     #   3 - unexpected error
     
+    check_done = Signal((pd.DataFrame, bool))
     row_done = Signal(int, int)
     all_done = Signal()
     
-    def __init__(self, mappings: list[tuple[str, str]], connector: DBConnector, factory: DAOFactory):
+    def __init__(self, cache: DataCache):
         super().__init__()
-        self.mappings = mappings
-        self.connector = connector
-        self._factory = factory
+        self.mappings: pd.DataFrame = None
+        self.cache = cache
+        self.connector = DBConnector()
+        self.connector.connect()
+        self._factory = DAOFactory(self.connector)
+        self.handler = FileHandler(self._factory, self.cache)
+       
+    def check(self, path: str):
+        file_path = path
+        self.mappings = self.handler.read_mappings(file_path)
+        self.mappings, valid = self.handler.check_mappings(self.mappings)
+        
+        self.check_done.emit(self.mappings, valid)
         
     def run(self):
         for i, (alias, customer) in enumerate(self.mappings):
@@ -61,8 +75,8 @@ class AliasPage(QWidget):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
-        self.worker: AliasInsertWorker | None = None
-        self._mappings: list[tuple[str, str]] = []
+        self.worker: AliasWorker | None = None
+        self._mappings: pd.Dataframe
         self._build_ui()
         
     # UI Builder
@@ -191,33 +205,20 @@ class AliasPage(QWidget):
         if not path:
             return
         
-        #mappings, error = self._parse_csv(path)
-        mappings = ("testAlias", "testCustomer")
-        error = None
-        
-        if error:
-            QMessageBox.warning(self, "Invalid File", error)
-            return
-        
-        self._mappings = mappings
-        self.file_label.setText(f"{Path(path).name} - {len(mappings)} mapping(s) found")
-        self._populate_table(mappings)
-        self.clear_btn.setEnabled(True)
-        self.insert_btn.setEnable(True)
-        
-    # TODO move csv parsing to report handler
+        self.file_label.setText(f"{Path(path).name}")
+        self.worker = AliasWorker(self.controller.cache)
+        self.worker.check(path)
+        self.worker.check_done.connect(self._on_check_done)
         
     # Table
-    def _populate_table(self, mappings: list[tuple[str, str]]):
+    def _populate_table(self, mappings: pd.DataFrame):
         self.table.setRowCount(0)
-        for alias, customer in mappings:
+        for index, alias, customer, status_code in mappings.itertuples(index=True):
             row = self.table.rowCount()
             self.table.insertRow(row)
             self.table.setItem(row, COL_ALIAS, QTableWidgetItem(alias))
             self.table.setItem(row, COL_CUSTOMER, QTableWidgetItem(customer))
-            status_item = QTableWidgetItem("Pending")
-            status_item.setForeground(QColor(STATUS_COLORS["pending"]))
-            self.table.setItem(row, COL_STATUS, status_item)
+            self._set_row_status(index, status_code)
             
     def _set_row_status(self, row: int, code: int):
         labels = {0: "Inserted", 1: "Duplicate", 2: "Customer Not Found", 3: "Error"}
@@ -247,7 +248,21 @@ class AliasPage(QWidget):
     def _on_row_done(self, row: int, code: int):
         self._set_row_status(row, code)
         
-    def _on_all_done(self):
+    def _on_check_done(self, mappings: pd.DataFrame, valid: bool):
+        # TODO populate rows with status of each mapping row
+        
+        if not valid:
+            QMessageBox.warning(self, "Invalid File", "Selected file is not a valid alias mapping file")
+            return
+        
+        self._mappings = mappings
+        
+        self._populate_table(self._mappings)
+        self.clear_btn.setEnabled(True)
+        self.insert_btn.setEnable(True)
+        pass
+        
+    def _on_all_done(self, mappings: pd.DataFrame):
         self._lock_ui(False)
         
         inserted = sum(1 for r in range(self.table.rowCount()) if self.table.item(r, COL_STATUS).text() == "Inserted")

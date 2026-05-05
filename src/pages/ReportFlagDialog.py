@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QRect
 from PySide6.QtGui import QColor, QFont
  
-from src.ReportHandler import ReportHandler
+from src.FileHandler import FileHandler
 from src.Report import Report
 from DataCache import DataCache
 from src.DBConnection import *
@@ -57,7 +57,7 @@ class ReportFlagDialog(QDialog):
         self.queue_index = queue_index
         self.connector = connector
         self._factory = factory
-        self._handler = ReportHandler(connector, self._factory)
+        self._handler = FileHandler(connector, self._factory)
         self.cache = cache
         self.cache.refresh()
         self._resolution_panel = None

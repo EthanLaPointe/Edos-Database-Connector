@@ -10,7 +10,7 @@ class Report:
         self.manufacturerName = ""
         self.month = ""
         self.year = ""
-        self.dataframe = None
+        self.dataframe: pd.DataFrame = None
         self.unknown_aliases = None
 
     def set_info(self, file_path):
