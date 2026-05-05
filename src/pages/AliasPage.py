@@ -23,6 +23,7 @@ COL_STATUS = 2
 
 STATUS_COLORS = {
     "pending": "#94a3b8",
+    "valid": "#33bccb",
     "success": "#22c55e",
     "error": "#ef4444",
     "duplicate": "#f59e0b",
@@ -37,7 +38,7 @@ class AliasWorker(QThread):
     #   2 - customer not found in database
     #   3 - unexpected error
     
-    check_done = Signal((pd.DataFrame, bool))
+    check_done = Signal(pd.DataFrame, bool)
     row_done = Signal(int, int)
     all_done = Signal()
     
@@ -63,12 +64,12 @@ class AliasWorker(QThread):
             self.row_done.emit(i, code)
         self.all_done.emit()
         
-    def _insert(self, alias: str, customer: str) -> int:
-        try:
-            # TODO add insert functionality and validity checks
-            return 0
-        except Exception:
-            return 3
+    def insert(self, alias: str, customer: str) -> int:
+        # TODO
+        # Trim status column off mappings and send to handler for insertion
+        # Lock insert button until all unknown customers are added?
+        # Add FlagDialog for alias page to handle unknowns?
+        pass
         
 # Alias Upload Page
 class AliasPage(QWidget):
@@ -207,8 +208,9 @@ class AliasPage(QWidget):
         
         self.file_label.setText(f"{Path(path).name}")
         self.worker = AliasWorker(self.controller.cache)
-        self.worker.check(path)
         self.worker.check_done.connect(self._on_check_done)
+        self.worker.check(path)
+        
         
     # Table
     def _populate_table(self, mappings: pd.DataFrame):
@@ -221,8 +223,8 @@ class AliasPage(QWidget):
             self._set_row_status(index, status_code)
             
     def _set_row_status(self, row: int, code: int):
-        labels = {0: "Inserted", 1: "Duplicate", 2: "Customer Not Found", 3: "Error"}
-        keys = {0: "success", 1: "duplicate", 2: "error", 3: "error"}
+        labels = {0: "Valid", 1: "Duplicate", 2: "Customer Not Found", 3: "Error", 4: "Inserted"}
+        keys = {0: "valid", 1: "duplicate", 2: "error", 3: "error", 4: "success"}
         text = labels.get(code, "Unknown")
         color = STATUS_COLORS.get(keys.get(code, "error"), "#ef4444")
         
@@ -256,11 +258,11 @@ class AliasPage(QWidget):
             return
         
         self._mappings = mappings
+        print(self._mappings)
         
         self._populate_table(self._mappings)
         self.clear_btn.setEnabled(True)
-        self.insert_btn.setEnable(True)
-        pass
+        self.insert_btn.setEnabled(True)
         
     def _on_all_done(self, mappings: pd.DataFrame):
         self._lock_ui(False)

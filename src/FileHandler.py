@@ -16,7 +16,7 @@ REPORT_FIELD_LIST = ["customername", "city", "state", "stockcode", "productfam",
 MAPPING_FIELD_LIST = ["alias", "parent"]
 
 # Status codes for individual mappings
-MAPPING_CODES = {"valid": 0, "duplicate alias": 2, "unknown customer": 1}
+MAPPING_CODES = {"valid": 0, "duplicate alias": 1, "unknown customer": 2}
 
 class FileHandler:
 
@@ -200,17 +200,33 @@ class FileHandler:
 
         #Trim DF to only contain desired columns
         dataframe = dataframe.iloc[:, fields_to_keep]
-        dataframe.columns = MAPPING_FIELD_LIST
         column_list = list(map(lambda x: x.lower(), dataframe.columns.tolist()))
 
         if MAPPING_FIELD_LIST[0] in column_list and MAPPING_FIELD_LIST[1] in column_list:
             valid_columns = True
+            dataframe.columns = MAPPING_FIELD_LIST
             self.cache.refresh()
-            # TODO change np.where to row by row check for status
+            
             dataframe.insert(loc=len(dataframe.columns), column="status", value=np.nan)
-            dataframe["status"] = np.where(dataframe["parent"] in self.cache.customer_aliases, MAPPING_CODES["valid"], MAPPING_CODES["unknown customer"])
-            dataframe["status"] = np.where(dataframe["alias"] in self.cache.customer_aliases, MAPPING_CODES["duplicate alias"], MAPPING_CODES["valid"])
-        
+            
+            # Filter names in alias and parent columns to match report filtering
+            dataframe = dataframe.map(lambda s: s.lower() if isinstance(s, str) else s)
+            dataframe["parent"] = dataframe["parent"].astype(str).str.replace(r"[.'(),-]", '', regex=True).str.replace(r' +', ' ', regex=True).str.strip()
+            dataframe["alias"] = dataframe["alias"].astype(str).str.replace(r"[.'(),-]", '', regex=True).str.replace(r' +', ' ', regex=True).str.strip()
+            
+            # Set row status
+            dataframe["status"] = np.where(dataframe["alias"].isin(self.cache.customer_aliases), MAPPING_CODES["duplicate alias"], MAPPING_CODES["valid"])
+            # Skip any rows that already have a non-valid status
+            dataframe["status"] = np.where(
+                dataframe["status"] == MAPPING_CODES["duplicate alias"],
+                dataframe["status"],
+                np.where(
+                    dataframe["parent"].isin(self.cache.customer_aliases),
+                    MAPPING_CODES["valid"],
+                    MAPPING_CODES["unknown customer"]
+                )
+            )
+            
         return (dataframe, valid_columns)
     
     def insert_alias_mappings(self, dataframe: pd.DataFrame) -> bool:

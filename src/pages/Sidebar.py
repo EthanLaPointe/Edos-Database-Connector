@@ -31,7 +31,7 @@ class Sidebar(QFrame):
         nav_items = [
             ("Dashboard", "home", lambda: controller.show_home()),
             ("Insert Report", "report", lambda: controller.show_report()),
-            ("Alias Mappings", "alias", lambda: controller.show_alias()),
+            ("Alias Mapping", "alias", lambda: controller.show_alias()),
         ]
         
         for label, key, action in nav_items:
