@@ -187,7 +187,6 @@ class FileHandler:
         
         valid_columns = False
         column_list = list(map(lambda x: x.lower(), dataframe.columns.tolist()))
-        print(column_list)
         
         fields_to_keep = []
 
@@ -200,6 +199,7 @@ class FileHandler:
 
         #Trim DF to only contain desired columns
         dataframe = dataframe.iloc[:, fields_to_keep]
+        dataframe = dataframe.dropna()
         column_list = list(map(lambda x: x.lower(), dataframe.columns.tolist()))
 
         if MAPPING_FIELD_LIST[0] in column_list and MAPPING_FIELD_LIST[1] in column_list:
