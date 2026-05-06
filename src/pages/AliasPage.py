@@ -6,9 +6,9 @@ from PySide6.QtWidgets import(
     QWidget, QFrame, QHBoxLayout, QVBoxLayout,
     QLabel, QScrollArea, QPushButton, QFileDialog,
     QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView,
-    QAbstractItemView, QSizePolicy,
+    QAbstractItemView, QSizePolicy, QTableView,
 )
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal, QAbstractTableModel, QModelIndex
 from PySide6.QtGui import QColor
 
 from pages.Sidebar import Sidebar
@@ -21,6 +21,7 @@ COL_ALIAS = 0
 COL_CUSTOMER = 1
 COL_STATUS = 2
 
+# Status Code Colors
 STATUS_COLORS = {
     "pending": "#94a3b8",
     "valid": "#33bccb",
@@ -29,8 +30,73 @@ STATUS_COLORS = {
     "duplicate": "#f59e0b",
 }
 
-# Insert Worker
+# Table Class
+class AliasMappingModel(QAbstractTableModel):
+    HEADERS = ["Alias", "Customer Name", "Status"]
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._mappings: pd.DataFrame = pd.DataFrame(columns=["alias", "customer", "status"])
+        
+    # Qt Overrides
+    def rowCount(self, parent=QModelIndex()):
+        return 0 if parent.isValid() else len(self._mappings)
+    
+    def columnCount(self, parent=QModelIndex()):
+        return 0 if parent.isValid() else 3
+    
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        
+        col = index.column()
+        row_data = self._mappings.iloc[index.row()]
+        
+        if role == Qt.DisplayRole:
+            if col == COL_ALIAS:
+                return str(row_data["alias"])
+            if col == COL_CUSTOMER:
+                return str(row_data["customer"])
+            if col == COL_STATUS:
+                code = int(row_data["status"])
+                return {0: "Valid", 1: "Duplicate", 2: "Customer Not Found",
+                        3: "Error", 4: "Inserted"}.get(code, "Unknown")
+                
+        if role == Qt.ForegroundRole and col == COL_STATUS:
+            code = int(row_data["status"])
+            key = {0: "valid", 1: "duplicate", 2: "error",
+                   3: "error", 4: "success"}.get(code, "error")
+            return QColor(STATUS_COLORS.get(key, "#ef4444"))
+        
+        if role == Qt.TextAlignmentRole and col == COL_STATUS:
+            return Qt.AlignCenter
+        
+        return None
 
+    def headerData(self, section, orientation, role=Qt.DisplayRole):
+        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+            return self.HEADERS[section]
+        return None
+    
+    def load(self, df: pd.DataFrame):
+        """Replace the entire dataset"""
+        self.beginResetModel()
+        df.columns = ["alias", "customer", "status"]
+        self._mappings = df.reset_index(drop=True)
+        self.endResetModel()
+        
+    def update_row(self, row: int, code: int):
+        """Patch a single status cell"""
+        self._mappings.at[row, "status"] = code
+        idx = self.index(row, COL_STATUS)
+        self.dataChanged.emit(idx, idx, [Qt.DisplayRole, Qt.ForegroundRole])
+        
+    def clear(self):
+        self.beginResetModel()
+        self._mappings = pd.DataFrame(columns=["alias", "customer", "status"])
+        self.endResetModel()
+
+# Alias Worker
 class AliasWorker(QThread):
     # Signals:
     #   0 - inserted successfully
@@ -77,7 +143,7 @@ class AliasPage(QWidget):
         super().__init__()
         self.controller = controller
         self.worker: AliasWorker | None = None
-        self._mappings: pd.Dataframe
+        self._mappings: pd.DataFrame
         self._build_ui()
         
     # UI Builder
@@ -136,7 +202,7 @@ class AliasPage(QWidget):
         self.choose_btn.clicked.connect(self._choose_file)
         btn_row.addWidget(self.choose_btn)
         
-        btn_row.addStretch
+        btn_row.addStretch()
         
         self.clear_btn = QPushButton("Clear")
         self.clear_btn.setObjectName("cancelBtn")
@@ -169,13 +235,15 @@ class AliasPage(QWidget):
         table_layout = QVBoxLayout(table_frame)
         table_layout.setContentsMargins(16, 16, 16, 16)
         
-        self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["Alias", "Customer Name", "Status"])
+        self._model = AliasMappingModel(self)
+        
+        self.table = QTableView()
+        self.table.setModel(self._model)
         self.table.horizontalHeader().setSectionResizeMode(COL_ALIAS, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(COL_CUSTOMER, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(COL_STATUS, QHeaderView.ResizeToContents)
         self.table.verticalHeader().setVisible(False)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        #self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setMinimumHeight(260)
         self.table.setObjectName("aliasTable")
@@ -211,34 +279,19 @@ class AliasPage(QWidget):
         self.worker.check_done.connect(self._on_check_done)
         self.worker.check(path)
         
-        
     # Table
     def _populate_table(self, mappings: pd.DataFrame):
-        self.table.setRowCount(0)
-        for index, alias, customer, status_code in mappings.itertuples(index=True):
-            row = self.table.rowCount()
-            self.table.insertRow(row)
-            self.table.setItem(row, COL_ALIAS, QTableWidgetItem(alias))
-            self.table.setItem(row, COL_CUSTOMER, QTableWidgetItem(customer))
-            self._set_row_status(index, status_code)
+        self._model.load(mappings)
             
     def _set_row_status(self, row: int, code: int):
-        labels = {0: "Valid", 1: "Duplicate", 2: "Customer Not Found", 3: "Error", 4: "Inserted"}
-        keys = {0: "valid", 1: "duplicate", 2: "error", 3: "error", 4: "success"}
-        text = labels.get(code, "Unknown")
-        color = STATUS_COLORS.get(keys.get(code, "error"), "#ef4444")
-        
-        item = QTableWidgetItem(text)
-        item.setForeground(QColor(color))
-        self.table.setItem(row, COL_STATUS, item)
-        self.table.scrollToItem(item)
+        self._model.update_row(row, code)
         
     # Clear    
     def _clear(self):
         if self.worker and self.worker.isRunning():
             return
-        self._mappings.clear()
-        self.table.setRowCount(0)
+        self._model.clear()
+        self._mappings = pd.DataFrame()
         self.file_label.setText("No file selected.")
         self.clear_btn.setEnabled(False)
         self.insert_btn.setEnabled(False)
@@ -258,7 +311,6 @@ class AliasPage(QWidget):
             return
         
         self._mappings = mappings
-        print(self._mappings)
         
         self._populate_table(self._mappings)
         self.clear_btn.setEnabled(True)
