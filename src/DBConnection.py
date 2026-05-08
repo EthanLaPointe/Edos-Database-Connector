@@ -295,7 +295,7 @@ class CustomerDAO(DAO):
 
     def create(self, customer: Customer) -> Customer:
         with self.db.cursor() as cursor:
-            cursor.execute("INSERT INTO customers (customer_name) VALUES (%s) RETURNING customer_id", (customer.customer_name,))
+            cursor.execute("INSERT INTO customers (customer_name) VALUES (%s) RETURNING customer_id ON CONFLICT DO NOTHING", (customer.customer_name,))
             customer.customer_id = cursor.fetchone()[0]
         return customer
 

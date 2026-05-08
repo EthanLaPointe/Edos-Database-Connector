@@ -140,7 +140,7 @@ class ReportFlagDialog(QDialog):
         
     # Code 1: Manufacturer Unknown
     def _build_manufacturer_panel(self, layout: QVBoxLayout):
-        raw_name = getattr(self.report, "manufacturer", None) or "-"
+        raw_name = self.report.manufacturerName
         
         info = QLabel(
             f"The manufacturer <b>{raw_name}</b> was not found in the database.\n"
@@ -170,8 +170,8 @@ class ReportFlagDialog(QDialog):
             return
         try:
             manufacturer = self._factory.manufacturers.create(Manufacturer(manufacturer_id=None, manufacturer_name=name))
-            if manufacturer.manufacturer_name == self.report.manufacturerName:
-                self.cache.manufacturers[manufacturer.name] = manufacturer.manufacturer_id
+            if manufacturer.manufacturer_name == self.report.manufacturerName.strip().lower():
+                self.cache.manufacturers[manufacturer.manufacturer_name] = manufacturer.manufacturer_id
                 self._retry_insert()
             else:
                 print("names do not match")

@@ -36,7 +36,7 @@ class AliasMappingModel(QAbstractTableModel):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._mappings: pd.DataFrame = pd.DataFrame(columns=["alias", "customer", "status"])
+        self._mappings: pd.DataFrame = pd.DataFrame(columns=["alias", "parent", "status"])
         
     # Qt Overrides
     def rowCount(self, parent=QModelIndex()):
@@ -56,7 +56,7 @@ class AliasMappingModel(QAbstractTableModel):
             if col == COL_ALIAS:
                 return str(row_data["alias"])
             if col == COL_CUSTOMER:
-                return str(row_data["customer"])
+                return str(row_data["parent"])
             if col == COL_STATUS:
                 code = int(row_data["status"])
                 return {0: "Valid", 1: "Duplicate", 2: "Customer Not Found",
@@ -81,7 +81,7 @@ class AliasMappingModel(QAbstractTableModel):
     def load(self, df: pd.DataFrame):
         """Replace the entire dataset"""
         self.beginResetModel()
-        df.columns = ["alias", "customer", "status"]
+        df.columns = ["alias", "parent", "status"]
         self._mappings = df.reset_index(drop=True)
         self.endResetModel()
         
@@ -91,9 +91,34 @@ class AliasMappingModel(QAbstractTableModel):
         idx = self.index(row, COL_STATUS)
         self.dataChanged.emit(idx, idx, [Qt.DisplayRole, Qt.ForegroundRole])
         
+    def update_rows(self, rows: list[int], code: int):
+        """Patch multiple status cells and emit a single range update."""
+        if not rows:
+            return
+        rows = sorted(set(rows))
+        self._mappings.loc[rows, "status"] = code
+        top = self.index(rows[0], COL_STATUS)
+        bottom = self.index(rows[-1], COL_STATUS)
+        self.dataChanged.emit(top, bottom, [Qt.DisplayRole, Qt.ForegroundRole])
+    
+    def unknown_customers(self) -> set[str]:
+        """Returns a set of customer names that are not present in the database"""
+        mask = self._mappings["status"] == 2
+        return set(self._mappings.loc[mask, "parent"])
+    
+    def mark_customers_inserted(self, names: set[str]):
+        """Mark previously unknown customers as pending to be checked again"""
+        mask = self._mappings["parent"].isin(names) & (self._mappings["status"] == 2)
+        self._mappings.loc[mask, "status"] = 0
+        if mask.any():
+            rows = self._mappings.index[mask]
+            top = self.index(rows[0], COL_STATUS)
+            btm = self.index(rows[-1], COL_STATUS)
+            self.dataChanged.emit(top, btm, [Qt.DisplayRole, Qt.ForegroundRole])
+        
     def clear(self):
         self.beginResetModel()
-        self._mappings = pd.DataFrame(columns=["alias", "customer", "status"])
+        self._mappings = pd.DataFrame(columns=["alias", "parent", "status"])
         self.endResetModel()
 
 # Alias Worker
@@ -105,8 +130,8 @@ class AliasWorker(QThread):
     #   3 - unexpected error
     
     check_done = Signal(pd.DataFrame, bool)
-    row_done = Signal(int, int)
-    all_done = Signal()
+    unknown_insert_done = Signal()
+    all_done = Signal(bool)
     
     def __init__(self, cache: DataCache):
         super().__init__()
@@ -116,26 +141,33 @@ class AliasWorker(QThread):
         self.connector.connect()
         self._factory = DAOFactory(self.connector)
         self.handler = FileHandler(self._factory, self.cache)
-       
-    def check(self, path: str):
-        file_path = path
-        self.mappings = self.handler.read_mappings(file_path)
-        self.mappings, valid = self.handler.check_mappings(self.mappings)
         
+    def read_file(self, path: str):
+        """Read csv file located at path"""
+        self.mappings = self.handler.read_mappings(path)
+       
+    def check(self):
+        """Check validity of mappings file and mapping pairs"""
+        self.mappings, valid = self.handler.check_mappings(self.mappings)
         self.check_done.emit(self.mappings, valid)
         
-    def run(self):
-        for i, (alias, customer) in enumerate(self.mappings):
-            code = self._insert(alias, customer)
-            self.row_done.emit(i, code)
-        self.all_done.emit()
+    def insert_unknown_customers(self, names: set[str]):
+        """Insert each unknown name as a new customer in the database.
+        Calls check after insertion"""
+        customer_list: list[Customer] = []
+        for name in names:
+            customer_list.append(Customer(customer_id=None, customer_name=name))
+            
+        self._factory.customers.create_bulk(customer_list)
+        self.cache.refresh()
+        self.unknown_insert_done.emit()
         
-    def insert(self, alias: str, customer: str) -> int:
-        # TODO
-        # Trim status column off mappings and send to handler for insertion
-        # Lock insert button until all unknown customers are added?
-        # Add FlagDialog for alias page to handle unknowns?
-        pass
+    def insert(self):
+        """Insert mapping list and refresh cache upon successful insertion"""
+        success = self.handler.insert_alias_mappings(self.mappings.drop(columns=["status"]))
+        self.cache.refresh()
+            
+        self.all_done.emit(success)
         
 # Alias Upload Page
 class AliasPage(QWidget):
@@ -256,6 +288,16 @@ class AliasPage(QWidget):
         submit_row = QHBoxLayout()
         submit_row.addStretch()
         
+        self.unknown_btn = QPushButton("Insert Unknown Customers")
+        self.unknown_btn.setMinimumSize(200, 44)
+        self.unknown_btn.setCursor(Qt.PointingHandCursor)
+        self.unknown_btn.setEnabled(False)
+        self.unknown_btn.setObjectName("secondaryBtn")
+        self.unknown_btn.clicked.connect(self._handle_insert_unknown)
+        submit_row.addWidget(self.unknown_btn)
+        
+        submit_row.addSpacing(10)
+        
         self.insert_btn = QPushButton("Insert Mappings")
         self.insert_btn.setMinimumSize(180, 44)
         self.insert_btn.setCursor(Qt.PointingHandCursor)
@@ -277,7 +319,8 @@ class AliasPage(QWidget):
         self.file_label.setText(f"{Path(path).name}")
         self.worker = AliasWorker(self.controller.cache)
         self.worker.check_done.connect(self._on_check_done)
-        self.worker.check(path)
+        self.worker.read_file(path)
+        self.worker.check()
         
     # Table
     def _populate_table(self, mappings: pd.DataFrame):
@@ -298,54 +341,90 @@ class AliasPage(QWidget):
         
     # Insert
     def _handle_insert(self):
-        pass
+         self.worker.all_done.connect(self._on_all_done)
+         self.worker.insert()
+    
+    def _handle_insert_unknown(self):
+        unknown = self._model.unknown_customers()
+        if not unknown:
+            QMessageBox.information(self, "Nothing to Insert", "No unknown customers found in the current mapping")
+            
+        names_list = "\n  * " + "\n  * ".join(unknown)
+        reply = QMessageBox.question(
+            self,
+            "Insert Unknown Customers",
+            f"{len(unknown)} customer(s) were not found in the database"
+            f"and will be created.\n\nProceed?",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        
+        self._lock_ui(True)
+        self.unknown_btn.setText("Inserting Customers...")
+        
+        self.worker.unknown_insert_done.connect(self._on_unknown_inserted)
+        self.worker.insert_unknown_customers(unknown)
     
     def _on_row_done(self, row: int, code: int):
         self._set_row_status(row, code)
         
     def _on_check_done(self, mappings: pd.DataFrame, valid: bool):
-        # TODO populate rows with status of each mapping row
         
         if not valid:
             QMessageBox.warning(self, "Invalid File", "Selected file is not a valid alias mapping file")
             return
         
-        self._mappings = mappings
-        
+        self._mappings = mappings.reset_index(drop=True)
         self._populate_table(self._mappings)
         self.clear_btn.setEnabled(True)
-        self.insert_btn.setEnabled(True)
+        has_unknown = bool(self._model.unknown_customers())
+        self.insert_btn.setEnabled(not has_unknown)
+        self._refresh_unknown_btn()
         
-    def _on_all_done(self, mappings: pd.DataFrame):
+    def _on_all_done(self, success: bool):
         self._lock_ui(False)
-        
-        inserted = sum(1 for r in range(self.table.rowCount()) if self.table.item(r, COL_STATUS).text() == "Inserted")
-        duplicates = sum(1 for r in range(self.table.rowCount()) if self.table.item(r, COL_STATUS).text() == "Duplicate")
-        errors = self.table.rowCount() - inserted - duplicates
-        
-        lines = []
-        if inserted:
-            lines.append(f"{inserted} mapping(s) inserted successfully")
-        if duplicates:
-            lines.append(f"{duplicates} skipped (already mapped)")
-        if errors:
-            lines.append(f"{errors} failed")
             
-        has_issues = duplicates or errors
         msg = QMessageBox(self)
-        msg.setWindowTitle("Insert Complete")
-        msg.setIcon(QMessageBox.Warning if has_issues else QMessageBox.Information)
-        msg.setText(f"Processed {self.table.rowCount()} mapping(s).")
-        msg.setInformativeText("\n".join(lines))
-        msg.setStandardButtons(QMessageBox.Ok)
-        msg.exec()
         
+        if success:
+            rows_to_update: list[int] = []
+            for i, alias, _, _ in self._mappings.itertuples(index=True):
+                if alias in self.controller.cache.customer_aliases:
+                    rows_to_update.append(i)
+            self._model.update_rows(rows_to_update, 4)
+            
+            msg.setWindowTitle("Insert Complete")
+            msg.setIcon(QMessageBox.Information)
+            msg.setText(f"Processed {self._model.rowCount()} mapping(s).")
+            msg.setStandardButtons(QMessageBox.Ok)
+            msg.exec()
+        else:
+            msg.setWindowTitle("Insert Failed")
+            msg.setIcon(QMessageBox.Information)
+            msg.setText("Failed to insert chosen mapping file")
+            msg.setStandardButtons(QMessageBox.Ok)
+            msg.exec()
+        
+    def _on_unknown_inserted(self):
+        self._lock_ui(False)
+        self.unknown_btn.setText("Insert Unknown Customers")
+        self.worker.check()
+        
+        self._refresh_unknown_btn()
+        
+    def _refresh_unknown_btn(self):
+        """Enable the unknown customers button only when unknowns exist."""
+        has_unknown = bool(self._model.unknown_customers())
+        self.unknown_btn.setEnabled(has_unknown)
+    
     # Helpers
     def _lock_ui(self, locked: bool):
         self.choose_btn.setEnabled(not locked)
         self.clear_btn.setEnabled(not locked)
+        self.unknown_btn.setEnabled(not locked)
         self.insert_btn.setEnabled(not locked)
-        self.insert_btn.setText("Inserting..." if locked else "Insert Mappings")
+        #self.insert_btn.setText("Inserting..." if locked else "Insert Mappings")
         
     def _section_label(self, text: str) -> QLabel:
         lbl = QLabel(text)
