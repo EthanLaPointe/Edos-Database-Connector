@@ -163,7 +163,7 @@ class FileHandler:
         unknown_list = {}
         valid_manufacturer = False
         already_present = False
-        manufacturer_id = self.cache.manufacturers[report.manufacturerName] | None
+        manufacturer_id = self.cache.manufacturers[report.manufacturerName] if (report.manufacturerName in self.cache.manufacturers) else None
 
         # check if manufacturer on report exists in database
         # if exists then check if a report already exists for that manufacturer during the report period
