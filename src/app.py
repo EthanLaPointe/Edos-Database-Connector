@@ -1,5 +1,4 @@
 from PySide6.QtWidgets import QMainWindow, QStackedWidget, QWidget
-from PySide6.QtCore import Qt
 from pages.LoginPage import LoginPage
 from pages.HomePage import HomePage
 from pages.ReportPage import ReportPage

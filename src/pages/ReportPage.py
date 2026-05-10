@@ -4,9 +4,8 @@ from collections import Counter
 
 from PySide6.QtWidgets import (
     QWidget, QFrame, QHBoxLayout, QVBoxLayout,
-    QLabel, QScrollArea, QPushButton,
-    QSizePolicy, QMessageBox, QListWidget, QFileDialog,
-    QListWidgetItem,
+    QLabel, QScrollArea, QPushButton, QMessageBox, 
+    QListWidget, QFileDialog, QListWidgetItem,
 )
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QColor

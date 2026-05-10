@@ -1,8 +1,7 @@
 from PySide6.QtWidgets import (
     QWidget, QFrame, QHBoxLayout, QVBoxLayout,
-    QGridLayout, QLabel, QLineEdit, QScrollArea
+    QLabel, QScrollArea
 )
-from PySide6.QtCore import Qt
 
 from pages.Sidebar import Sidebar
 

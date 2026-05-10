@@ -6,7 +6,6 @@ from DBConnection import *
 from DataCache import DataCache
 from decimal import Decimal
 from pathlib import Path
-import psycopg2.extras
 
 # List of fields a report must contain
 REPORT_FIELD_LIST = ["customername", "city", "state", "stockcode", "productfam", "productdesc", "quantity", "saledate",

@@ -4,10 +4,11 @@ import traceback
  
 from PySide6.QtWidgets import (
     QWidget, QFrame, QHBoxLayout, QVBoxLayout, QFormLayout,
-    QLabel, QLineEdit, QPushButton, QScrollArea, QSizePolicy, QDialog,
+    QLabel, QLineEdit, QPushButton, QScrollArea, QSizePolicy, 
+    QDialog, QCompleter,
 )
-from PySide6.QtCore import Qt, Signal, QRect
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtCore import Qt, Signal, QStringListModel
+from PySide6.QtGui import QFont
  
 from src.FileHandler import FileHandler
 from src.Report import Report
@@ -57,15 +58,17 @@ class ReportFlagDialog(QDialog):
         self.queue_index = queue_index
         self.connector = connector
         self._factory = factory
-        self._handler = FileHandler(connector, self._factory)
+        self._handler = FileHandler(self._factory, cache)
         self.cache = cache
         self.cache.refresh()
         self._resolution_panel = None
         self._status_lbl = None
         self._mfr_input = None
+        self._customer_model: QStringListModel | None = None
+        self._alias_inputs: dict[str, QLineEdit] = {}
         
         self.setWindowTitle("Resolve Flag")
-        self.setMinimumWidth(620)
+        self.setMinimumWidth(750)
         self.setModal(True)
         
         self._build_ui()
@@ -189,6 +192,14 @@ class ReportFlagDialog(QDialog):
         info.setWordWrap(True)
         layout.addWidget(info)
         
+        hint = QLabel("Type to search - partial matches supported.")
+        hint.setObjectName("hintLabel")
+        layout.addWidget(hint)
+        
+        # Shared customer data string model
+        customer_names = sorted(self.cache.customers.keys())
+        self._customer_model = QStringListModel(customer_names)
+        
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
@@ -201,9 +212,10 @@ class ReportFlagDialog(QDialog):
         self._alias_inputs: dict[str, QLineEdit] = {}
         for alias in unknown_aliases:
             row = QHBoxLayout()
-            row.addStretch()
+            #row.addStretch()
             field = QLineEdit()
-            field.setPlaceholderText("Mapped customer name...")
+            field.setPlaceholderText("Type to search customers...")
+            field.setCompleter(self._make_completer())
             row.addWidget(field, stretch=10)
             add_cust_btn = QPushButton("Add as new customer")
             add_cust_btn.clicked.connect(partial(self._add_as_new_customer, alias))
@@ -234,11 +246,25 @@ class ReportFlagDialog(QDialog):
         save_btn.clicked.connect(self._resolve_aliases)
         layout.addWidget(save_btn)
         
+    def _make_completer(self) -> QCompleter:
+        """Return a new QCompleter based on the shared customer model"""
+        completer = QCompleter(self._customer_model, self)
+        completer.setFilterMode(Qt.MatchContains)
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        completer.setMaxVisibleItems(12)
+        return completer
+    
+    def _refresh_name_completers(self):
+        """Update shared customer model after a customer is added"""
+        customer_names = sorted(self.cache.customers.keys())
+        self._customer_model.setStringList(customer_names)
+        
     def _add_new_customer(self, cust_name: str):
         try: 
             customer = self._factory.customers.create(Customer(customer_id=None, customer_name=cust_name))
-            self._show_status(f"{customer.customer_name} successfully added as a new customer", error=False)
             self.cache.customer_aliases[customer.customer_name] = customer.customer_id
+            self._refresh_name_completers()
+            self._show_status(f"{customer.customer_name} successfully added as a new customer", error=False)
         except Exception as e:
             self._show_status(f"Failed to insert new customer: {e}", error=True)
         
@@ -246,15 +272,18 @@ class ReportFlagDialog(QDialog):
         if alias in self._alias_inputs:
             try:
                 customer = self._factory.customers.create(Customer(customer_id=None, customer_name=alias))
-                self._show_status(f"{customer.customer_name} successfully added as new customer", error=False)
-                self._alias_inputs.pop(alias)
                 self.cache.customer_aliases[customer.customer_name] = customer.customer_id
+                self._refresh_name_completers()
+                self._show_status(f"{customer.customer_name} successfully added as new customer", error=False)
+                #self._alias_inputs.pop(alias)
+                
             except Exception as e:
                 self._show_status(f"Failed to insert new customer: {e}", error=True)
         
     def _resolve_aliases(self):
+        valid_names = set(self.cache.customer_aliases.keys())
         mappings = {alias: field.text().strip() for alias, field in self._alias_inputs.items()}
-        print(mappings)
+        
         unmapped = [a for a, v in mappings.items() if not v]
         if unmapped:
             self._show_status(
@@ -262,10 +291,19 @@ class ReportFlagDialog(QDialog):
                 error=True,
             )
             return
+        invalid = [a for a, v in mappings.items() if v and v not in valid_names]
+        if invalid:
+            self._show_status(
+                f"Unrecognized customer name(s) for : {', '.join(invalid)}. "
+                "Use the autocomplete suggestions or add customer first.",
+                error=True,
+            )
+            return
+        
         try:
             alias_list: list[CustomerAlias] = [] 
             for alias, customer in mappings.items():
-                customer_id = self._factory.customers.get_by_name(customer).customer_id
+                customer_id = self.cache.customers[customer]
                 if customer_id:
                     alias_list.append(CustomerAlias(alias=alias, customer_id=customer_id))
                 
@@ -326,7 +364,7 @@ class ReportFlagDialog(QDialog):
                 
             self._emit_retry(new_code)
         except Exception as e:
-            self._show_status(f"Retry failed: {e},", error=True)
+            self._show_status(f"Retry failed: {traceback.format_exc()},", error=True)
     
     def _emit_retry(self, new_code: int):
         self.retry_done.emit(self.queue_index, new_code)
