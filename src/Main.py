@@ -1,7 +1,5 @@
 from app import App
-from DBConnection import DBConnector
-from PySide6 import QtWidgets
-from PySide6.QtWidgets import QApplication, QWidget, QMainWindow, QPushButton
+from PySide6.QtWidgets import QApplication
 import sys
 import os
 

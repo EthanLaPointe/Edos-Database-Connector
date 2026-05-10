@@ -1,12 +1,10 @@
 from pathlib import Path
-import csv
 import pandas as pd
 
 from PySide6.QtWidgets import(
     QWidget, QFrame, QHBoxLayout, QVBoxLayout,
     QLabel, QScrollArea, QPushButton, QFileDialog,
-    QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView,
-    QAbstractItemView, QSizePolicy, QTableView,
+    QMessageBox, QHeaderView, QAbstractItemView, QTableView,
 )
 from PySide6.QtCore import Qt, QThread, Signal, QAbstractTableModel, QModelIndex
 from PySide6.QtGui import QColor
