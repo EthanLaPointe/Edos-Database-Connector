@@ -162,9 +162,13 @@ class AliasWorker(QThread):
         
     def insert(self):
         """Insert mapping list and refresh cache upon successful insertion"""
-        success = self.handler.insert_alias_mappings(self.mappings.drop(columns=["status"]))
+        
+        # Drop any rows containing duplicate aliases
+        filtered_mappings = self.mappings[self.mappings["status"] != 1]
+        filtered_mappings = filtered_mappings.drop(columns=["status"])
+        success = self.handler.insert_alias_mappings(filtered_mappings)
         self.cache.refresh()
-            
+    
         self.all_done.emit(success)
         
 # Alias Upload Page
@@ -397,12 +401,18 @@ class AliasPage(QWidget):
             msg.setText(f"Processed {self._model.rowCount()} mapping(s).")
             msg.setStandardButtons(QMessageBox.Ok)
             msg.exec()
+            
+            self.insert_btn.setEnabled(False)
+            self._refresh_unknown_btn()
         else:
             msg.setWindowTitle("Insert Failed")
             msg.setIcon(QMessageBox.Information)
             msg.setText("Failed to insert chosen mapping file")
             msg.setStandardButtons(QMessageBox.Ok)
             msg.exec()
+            
+            self.insert_btn.setEnabled(False)
+            self._refresh_unknown_btn()
         
     def _on_unknown_inserted(self):
         self._lock_ui(False)

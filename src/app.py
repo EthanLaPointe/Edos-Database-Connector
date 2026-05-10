@@ -4,7 +4,6 @@ from pages.HomePage import HomePage
 from pages.ReportPage import ReportPage
 from pages.AliasPage import AliasPage
 from DBConnection import *
-from src.FileHandler import FileHandler
 from DataCache import DataCache
 
 class App(QMainWindow):
@@ -18,7 +17,6 @@ class App(QMainWindow):
         self.current_user: str | None = None
         self.connector = DBConnector()
         self.factory: DAOFactory = None
-        self.handler: FileHandler = None
         self.cache: DataCache = None
         
         # Central Widget
@@ -58,7 +56,6 @@ class App(QMainWindow):
         self.current_user = username
         self.factory = DAOFactory(self.connector)
         self.cache = DataCache(self.factory)
-        self.handler = FileHandler(self.factory, self.cache)
         self.show_home()
         
     def logout(self):
