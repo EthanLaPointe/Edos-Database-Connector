@@ -4,6 +4,7 @@ import psycopg2
 import psycopg2.extras
 import json
 import os
+import sys
 import contextlib
 from functools import reduce
 from dataclasses import dataclass
@@ -11,13 +12,6 @@ from decimal import Decimal
 from typing import Optional, Iterator, TypeVar, Any
 
 T = TypeVar("T")
-
-def tuple_to_nested(data):
-    def insert(d, item):
-        *keys, value = item
-        reduce(lambda d, k: d.setdefault(k, {}), keys[:-1], d)[keys[-1]] = value
-        return d
-    return reduce(insert, map(tuple, data), {})
 
 class DBConnector:
 
@@ -66,6 +60,14 @@ class DBConnector:
         )
 
     @staticmethod
+    def _credentials_path():
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            base_dir = os.path.dirname(__file__)
+        return os.path.join(base_dir, 'credentials.json')
+
+    @staticmethod
     def set_credentials(database_name, username, password, host, port):
         data = {
             "database": database_name,
@@ -75,17 +77,17 @@ class DBConnector:
             "port": port
         }
 
-        file_path = os.path.join(os.path.dirname(__file__), 'credentials.json')
-        with open(file_path, 'w') as f:
-            json.dump(data, f)
+        file_path = DBConnector._credentials_path()
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
 
     @staticmethod
     def check_credentials():
-        return os.path.isfile(os.path.join(os.path.dirname(__file__), 'credentials.json'))
+        return os.path.isfile(DBConnector._credentials_path())
 
     @staticmethod
     def get_credentials():
-        with open(os.path.join(os.path.dirname(__file__), 'credentials.json'), 'r') as f:
+        with open(DBConnector._credentials_path(), 'r', encoding='utf-8') as f:
             credentials = json.load(f)
         return credentials
 
