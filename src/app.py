@@ -1,4 +1,5 @@
 from PySide6.QtWidgets import QMainWindow, QStackedWidget, QWidget
+from PySide6.QtCore import Signal
 from pages.LoginPage import LoginPage
 from pages.HomePage import HomePage
 from pages.ReportPage import ReportPage
@@ -7,6 +8,9 @@ from DBConnection import *
 from DataCache import DataCache
 
 class App(QMainWindow):
+    
+    cache_updated = Signal(DataCache)
+    
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Edos Database Connector")
@@ -56,6 +60,7 @@ class App(QMainWindow):
         self.current_user = username
         self.factory = DAOFactory(self.connector)
         self.cache = DataCache(self.factory)
+        self.cache_updated.emit(self.cache)
         self.show_home()
         
     def logout(self):

@@ -138,15 +138,15 @@ class AliasWorker(QThread):
         self.connector = DBConnector()
         self.connector.connect()
         self._factory = DAOFactory(self.connector)
-        self.handler = FileHandler(self._factory, self.cache)
+        self._handler = FileHandler(self._factory, self.cache)
         
     def read_file(self, path: str):
         """Read csv file located at path"""
-        self.mappings = self.handler.read_mappings(path)
+        self.mappings = self._handler.read_mappings(path)
        
     def check(self):
         """Check validity of mappings file and mapping pairs"""
-        self.mappings, valid = self.handler.check_mappings(self.mappings)
+        self.mappings, valid = self._handler.check_mappings(self.mappings)
         self.check_done.emit(self.mappings, valid)
         
     def insert_unknown_customers(self, names: set[str]):
@@ -166,9 +166,12 @@ class AliasWorker(QThread):
         # Drop any rows containing duplicate aliases
         filtered_mappings = self.mappings[self.mappings["status"] != 1]
         filtered_mappings = filtered_mappings.drop(columns=["status"])
-        success = self.handler.insert_alias_mappings(filtered_mappings)
+        success = self._handler.insert_alias_mappings(filtered_mappings)
         self.cache.refresh()
     
+        self._handler = None
+        self._factory = None
+        self.connector.close()
         self.all_done.emit(success)
         
 # Alias Upload Page
@@ -176,7 +179,9 @@ class AliasPage(QWidget):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
+        self._cache: DataCache | None = None
         self.worker: AliasWorker | None = None
+        controller.cache_updated.connect(self._on_cache_updated)
         self._mappings: pd.DataFrame
         self._build_ui()
         
@@ -277,7 +282,7 @@ class AliasPage(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(COL_CUSTOMER, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(COL_STATUS, QHeaderView.ResizeToContents)
         self.table.verticalHeader().setVisible(False)
-        #self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setMinimumHeight(260)
         self.table.setObjectName("aliasTable")
@@ -319,7 +324,7 @@ class AliasPage(QWidget):
             return
         
         self.file_label.setText(f"{Path(path).name}")
-        self.worker = AliasWorker(self.controller.cache)
+        self.worker = AliasWorker(self._cache)
         self.worker.check_done.connect(self._on_check_done)
         self.worker.read_file(path)
         self.worker.check()
@@ -351,7 +356,6 @@ class AliasPage(QWidget):
         if not unknown:
             QMessageBox.information(self, "Nothing to Insert", "No unknown customers found in the current mapping")
             
-        names_list = "\n  * " + "\n  * ".join(unknown)
         reply = QMessageBox.question(
             self,
             "Insert Unknown Customers",
@@ -392,7 +396,7 @@ class AliasPage(QWidget):
         if success:
             rows_to_update: list[int] = []
             for i, alias, _, _ in self._mappings.itertuples(index=True):
-                if alias in self.controller.cache.customer_aliases:
+                if alias in self._cache.customer_aliases:
                     rows_to_update.append(i)
             self._model.update_rows(rows_to_update, 4)
             
@@ -426,13 +430,18 @@ class AliasPage(QWidget):
         has_unknown = bool(self._model.unknown_customers())
         self.unknown_btn.setEnabled(has_unknown)
     
+    def _on_cache_updated(self, cache: DataCache):
+        self._cache = cache
+        
+        if self.worker:
+            self.worker.cache = cache
+    
     # Helpers
     def _lock_ui(self, locked: bool):
         self.choose_btn.setEnabled(not locked)
         self.clear_btn.setEnabled(not locked)
         self.unknown_btn.setEnabled(not locked)
         self.insert_btn.setEnabled(not locked)
-        #self.insert_btn.setText("Inserting..." if locked else "Insert Mappings")
         
     def _section_label(self, text: str) -> QLabel:
         lbl = QLabel(text)

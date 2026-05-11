@@ -87,6 +87,8 @@ class ReportPage(QWidget):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
+        self._cache: DataCache | None = None
+        controller.cache_updated.connect(self._on_cache_updated)
         self.worker: InsertWorker | None = None
         self.sidebar = None
         self.single_file_btn = None
@@ -97,6 +99,12 @@ class ReportPage(QWidget):
         self._last_codes: list[int] = []
         self._queued_reports: list[Report] = []
         self._build_ui()
+        
+    def _on_cache_updated(self, cache: DataCache):
+        self._cache = cache
+        
+        if self.worker:
+            self.worker.cache = cache
         
     def _build_ui(self):
         root = QHBoxLayout(self)
@@ -337,9 +345,7 @@ class ReportPage(QWidget):
             report = report,
             code = code,
             queue_index = queue_index,
-            connector = self.controller.connector,
-            cache= self.controller.cache,
-            factory= self.controller.factory
+            cache= self._cache
         )
         dialog.retry_done.connect(self._on_flag_resolved)
         dialog.exec()
@@ -382,7 +388,7 @@ class ReportPage(QWidget):
             item.setForeground(QColor(STATUS_COLORS["queued"]))
             item.setData(ROLE_CODE, None)
             
-        self.worker = InsertWorker(reports=list(self._queued_reports), cache= self.controller.cache)
+        self.worker = InsertWorker(reports=list(self._queued_reports), cache= self._cache)
         self.worker.file_done.connect(self._on_file_done)
         self.worker.all_done.connect(self._on_all_done)
         self.worker.start()
