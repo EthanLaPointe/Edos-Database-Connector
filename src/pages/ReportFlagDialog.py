@@ -51,13 +51,14 @@ class ReportFlagDialog(QDialog):
     # Emitted after successful retry
     retry_done = Signal(int, int) # (queue_index, new_code)
     
-    def __init__(self, parent: QWidget, report: Report, code: int, queue_index: int, connector: DBConnector, cache: DataCache, factory: DAOFactory):
+    def __init__(self, parent: QWidget, report: Report, code: int, queue_index: int, cache: DataCache):
         super().__init__(parent)
         self.report = report
         self.code = code
         self.queue_index = queue_index
-        self.connector = connector
-        self._factory = factory
+        self.connector = DBConnector()
+        self.connector.connect()
+        self._factory = DAOFactory(self.connector)
         self._handler = FileHandler(self._factory, cache)
         self.cache = cache
         self.cache.refresh()
@@ -372,6 +373,7 @@ class ReportFlagDialog(QDialog):
         if new_code == 0:
             self._show_status(f"Success - {message}", error=False)
             self._resolution_panel.setEnabled(False)
+            self.connector.close()
         else:
             self._show_status(f"Still flagged: {message}", error=True)
             
@@ -387,3 +389,9 @@ class ReportFlagDialog(QDialog):
         self._status_lbl.style().polish(self._status_lbl)
         self._status_lbl.setText(text)
         self._status_lbl.show()
+        
+    def closeEvent(self, event):
+        self._factory = None
+        self._handler = None
+        self.connector.close()
+        super().closeEvent(event)
