@@ -11,6 +11,8 @@ if __name__ == "__main__":
     with open(os.path.join(os.path.dirname(__file__), 'style.qss'), 'r') as f:
         app.setStyleSheet(f.read())
         
+    # Testing commit
+    
     window = App()
     window.show()
     sys.exit(app.exec())
