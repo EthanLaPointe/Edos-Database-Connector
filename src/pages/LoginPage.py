@@ -1,109 +1,183 @@
-from collections.abc import Callable
-from numpy.f2py.auxfuncs import show
-from src.DBConnection import DBConnector
+from PySide6.QtWidgets import (
+    QWidget, QFrame, QVBoxLayout, QLabel, 
+    QLineEdit, QPushButton
+)
+from PySide6.QtCore import Qt
 
-import customtkinter as ctk
-
-class LoginPage(ctk.CTkFrame):
-    def __init__(self, parent, controller):
-        super().__init__(parent)
-        self.login_button = None
-        self.error_label = None
-        self.password_entry = None
-        self.username_entry = None
+class LoginPage(QWidget):
+    def __init__(self, controller):
+        super().__init__()
         self.controller = controller
+        self.database_input = None
+        self.username_input = None
+        self.password_input = None
+        self.host_input = None
+        self.port_input = None
+        self.error_label = None
+        self.login_button = None
+        self.input_spacing = 14
+        
         self._build_ui()
-
+        
     def _build_ui(self):
-
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
-
-        # Centered card
-        card = ctk.CTkFrame(self, width=550, height=700, corner_radius=20)
-        card.grid(row=0, column=0)
-        card.grid_propagate(False)
-
-        card.grid_rowconfigure(0, weight=1)
-        card.grid_rowconfigure(15, weight=1)
-        card.grid_columnconfigure(0, weight=1)
-
-        inner = ctk.CTkFrame(card, fg_color="transparent")
-        inner.grid(row=1, column=0, rowspan=14, sticky="nsew", padx=36)
-        inner.grid_columnconfigure(0, weight=1)
-
-        # Logo / app name
-        ctk.CTkLabel(inner, text="⬡  Edos Database Connector", font=ctk.CTkFont(family="Segoe UI", size=28, weight="bold"),).grid(row=0, column=0, pady=(0, 4), sticky="ew")
-        ctk.CTkLabel(inner, text="Sign in to continue", font=ctk.CTkFont(size=13), text_color="gray60",).grid(row=1, column=0, pady=(0,24), sticky="ew")
-
-        # Database Name
-        ctk.CTkLabel(inner, text="Database Name", anchor="w", font=ctk.CTkFont(size=12, weight="bold")).grid(row=2, column=0, sticky="w")
-        self.database_entry = ctk.CTkEntry(inner, placeholder_text="Enter Database Name", height=40, corner_radius=8)
-        self.database_entry.grid(row=3, column=0, pady=(4, 12), sticky="ew")
-
+        # Outer Layout
+        outer = QVBoxLayout(self)
+        outer.setAlignment(Qt.AlignCenter)
+        outer.setContentsMargins(0, 0, 0, 0)
+        
+        # Card
+        card = QFrame()
+        card.setObjectName("card")
+        card.setFixedSize(400, 600)
+        outer.addWidget(card)
+        
+        # Card Layout
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(40, 44, 40, 44)
+        layout.setSpacing(0)
+        
+        # Title
+        title = QLabel("Edos Database Connector")
+        title.setObjectName("appTitle")
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+        
+        subtitle = QLabel("Please login to continue")
+        subtitle.setObjectName("subtitle")
+        subtitle.setAlignment(Qt.AlignCenter)
+        layout.addWidget(subtitle)
+        layout.addSpacing(28)
+        
+        # Database name
+        database_label = QLabel("Database Name")
+        database_label.setObjectName("inputLabel1")
+        layout.addWidget(database_label)
+        layout.addSpacing(4)
+        
+        self.database_input = QLineEdit()
+        self.database_input.setPlaceholderText("Enter database name")
+        self.database_input.setMinimumHeight(42)
+        self.database_input.returnPressed.connect(self.set_focus)
+        layout.addWidget(self.database_input)
+        layout.addSpacing(self.input_spacing)
+        
         # Username
-        ctk.CTkLabel(inner, text="Username", anchor="w", font=ctk.CTkFont(size=12, weight="bold")).grid(row=4, column=0, sticky="w")
-        self.username_entry = ctk.CTkEntry(inner, placeholder_text="Enter Username", height=40, corner_radius=8)
-        self.username_entry.grid(row=5, column=0, pady=(4, 12), sticky="ew")
-
+        username_label = QLabel("Username")
+        username_label.setObjectName("inputLabel2")
+        layout.addWidget(username_label)
+        layout.addSpacing(4)
+        
+        self.username_input = QLineEdit()
+        self.username_input.setPlaceholderText("Enter username")
+        self.username_input.setMinimumHeight(42)
+        self.username_input.returnPressed.connect(self.set_focus)
+        layout.addWidget(self.username_input)
+        layout.addSpacing(self.input_spacing)
+        
         # Password
-        ctk.CTkLabel(inner, text="Password", anchor="w", font=ctk.CTkFont(size=12, weight="bold")).grid(row=6, column=0, sticky="ew")
-        self.password_entry = ctk.CTkEntry(inner, placeholder_text="Enter Password", show="*", height=40, corner_radius=8)
-        self.password_entry.grid(row=7, column=0, pady=(4, 12), sticky="ew")
+        password_label = QLabel("Password")
+        password_label.setObjectName("inputLabel3")
+        layout.addWidget(password_label)
+        layout.addSpacing(4)
+        
+        self.password_input = QLineEdit()
+        self.password_input.setPlaceholderText("Enter password")
+        self.password_input.setMinimumHeight(42)
+        self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.returnPressed.connect(self.set_focus)
+        layout.addWidget(self.password_input)
+        layout.addSpacing(self.input_spacing)
         
         # Host
-        ctk.CTkLabel(inner, text="Host", anchor="w", font=ctk.CTkFont(size=12, weight="bold")).grid(row=8, column=0, sticky="w")
-        self.host_entry = ctk.CTkEntry(inner, placeholder_text="Enter Host", height=40, corner_radius=8)
-        self.host_entry.grid(row=9, column=0, pady=(4, 12), sticky="ew")
+        host_label = QLabel("Host")
+        host_label.setObjectName("inputLabel4")
+        layout.addWidget(host_label)
+        layout.addSpacing(4)
+        
+        self.host_input = QLineEdit()
+        self.host_input.setPlaceholderText("Enter host (default: localhost)")
+        self.host_input.setMinimumHeight(42)
+        self.host_input.returnPressed.connect(self.set_focus)
+        layout.addWidget(self.host_input)
+        layout.addSpacing(self.input_spacing)
         
         # Port
-        ctk.CTkLabel(inner, text="Port", anchor="w", font=ctk.CTkFont(size=12, weight="bold")).grid(row=10, column=0, sticky="w")
-        self.port_entry = ctk.CTkEntry(inner, placeholder_text="Enter Port", height=40, corner_radius=8)
-        self.port_entry.grid(row=11, column=0, pady=(4, 6), sticky="ew")
-
-        # Error label
-        self.error_label = ctk.CTkLabel(inner, text="", text_color="red", font=ctk.CTkFont(size=12), anchor="w", wraplength=480)
-        self.error_label.grid(row=12, column=0, pady=(0, 12), sticky="ew")
-
-        # Login button
-        self.login_button = ctk.CTkButton(inner, text="Sign In", height=42, corner_radius=8, font=ctk.CTkFont(size=12, weight="bold"), command=self._handle_login,)
-        self.login_button.grid(row=13, column=0, sticky="ew")
-
-        # Bind enter key
-        self.password_entry.bind("<Return>", lambda e: self._handle_login())
-        self.username_entry.bind("<Return>", lambda e: self.password_entry.focus())
-
-
+        port_label = QLabel("Port")
+        port_label.setObjectName("inputLabel5")
+        layout.addWidget(port_label)
+        layout.addSpacing(4)
+        
+        self.port_input = QLineEdit()
+        self.port_input.setPlaceholderText("Enter port (default: 5432)")
+        self.port_input.setMinimumHeight(42)
+        self.port_input.returnPressed.connect(self._handle_login)
+        layout.addWidget(self.port_input)
+        layout.addSpacing(28)
+        
+        # Error Message
+        self.error_label = QLabel("")
+        self.error_label.setObjectName("errorLabel")
+        self.error_label.setVisible(False)
+        layout.addWidget(self.error_label)
+        layout.addSpacing(20)
+        
+        # Login Button
+        self.login_button = QPushButton("Sign In")
+        self.login_button.setMinimumHeight(44)
+        self.login_button.setCursor(Qt.PointingHandCursor)
+        self.login_button.clicked.connect(self._handle_login)
+        layout.addWidget(self.login_button)
+        
+        layout.addStretch()
+        
+    def set_focus(self):
+        if self.database_input.text() == "":
+            self.database_input.setFocus()
+        elif self.username_input.text() == "":
+            self.username_input.setFocus()
+        elif self.password_input.text() == "":
+            self.password_input.setFocus()
+        elif self.host_input.text() == "":
+            self.host_input.setFocus()
+        elif self.port_input.text() == "":
+            self.port_input.setFocus()
+        else:
+            pass
+        
     def _handle_login(self):
-        database_name = self.database_entry.get().strip()
-        username = self.username_entry.get().strip()
-        password = self.password_entry.get().strip()
-        host = self.host_entry.get().strip()
-        port = self.port_entry.get().strip()
+        database = self.database_input.text()
+        username = self.username_input.text()
+        password = self.password_input.text()
+        host = self.host_input.text() or "localhost"
+        port = self.port_input.text() or "5432"
         
-        self.controller.connector.set_credentials(database_name, username, password, host, port)
-        
-        if not database_name or not username or not password or not host or not port:
-            self.show_error("Please fill in all fields")
+        if not all([database, username, password]):
+            self.error_label.setText("Please fill in all required fields.")
+            self.error_label.setVisible(True)
             return
         
+        self.controller.connector.set_credentials(database, username, password, host, port)
         connection_status = 0
+        
         if self.controller.connector.check_credentials():
             try:
                 self.controller.connector.connect()
                 connection_status = self.controller.connector.conn.status
             except Exception as e:
-                self.show_error(e)
-
+                self.show_error(f"Connection failed: {str(e)}")
+                return
+        
         if connection_status == 1:
-            self.controller.current_user = self.controller.connector.get_credentials()["user"]
-            self.controller.login()
-
+            self.controller.login(username)
+        
     def show_error(self, message: str):
-        self.error_label.configure(text=message)
-
-    def get(self):
-        try:
-            return {"database": self.database_name, "user": self.username, "password": self.password, "host": self.host, "port": self.port}
-        except ValueError:
-            return None
+        if message:
+            self.error_label.setText(message)
+            self.error_label.setVisible(True)
+        else:
+            self.error_label.setText("")
+            self.error_label.setVisible(False)
+        
+        
+        
+        

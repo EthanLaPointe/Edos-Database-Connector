@@ -4,22 +4,14 @@ import psycopg2
 import psycopg2.extras
 import json
 import os
+import sys
 import contextlib
 from functools import reduce
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from datetime import date
+from dataclasses import dataclass
 from decimal import Decimal
-from typing import Optional, Iterator, TypeVar, Generic, Callable, Tuple, Any
+from typing import Optional, Iterator, TypeVar, Any
 
 T = TypeVar("T")
-
-def tuple_to_nested(data):
-    def insert(d, item):
-        *keys, value = item
-        reduce(lambda d, k: d.setdefault(k, {}), keys[:-1], d)[keys[-1]] = value
-        return d
-    return reduce(insert, map(tuple, data), {})
 
 class DBConnector:
 
@@ -68,6 +60,14 @@ class DBConnector:
         )
 
     @staticmethod
+    def _credentials_path():
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            base_dir = os.path.dirname(__file__)
+        return os.path.join(base_dir, 'credentials.json')
+
+    @staticmethod
     def set_credentials(database_name, username, password, host, port):
         data = {
             "database": database_name,
@@ -77,25 +77,19 @@ class DBConnector:
             "port": port
         }
 
-        file_path = os.path.join(os.path.dirname(__file__), 'credentials.json')
-        with open(file_path, 'w') as f:
-            json.dump(data, f)
+        file_path = DBConnector._credentials_path()
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
 
     @staticmethod
     def check_credentials():
-        return os.path.isfile(os.path.join(os.path.dirname(__file__), 'credentials.json'))
+        return os.path.isfile(DBConnector._credentials_path())
 
     @staticmethod
     def get_credentials():
-        with open(os.path.join(os.path.dirname(__file__), 'credentials.json'), 'r') as f:
+        with open(DBConnector._credentials_path(), 'r', encoding='utf-8') as f:
             credentials = json.load(f)
         return credentials
-
-    def populate_lists(self):
-        self.customer_list = self.get_customer_list()
-        self.alias_list = self.get_customer_alias_list()
-        self.item_list = self.get_item_list()
-        self.location_list = self.get_location_list()
 
     def select_report_by_id(self, _id):
         report_id = _id
@@ -301,7 +295,7 @@ class CustomerDAO(DAO):
 
     def create(self, customer: Customer) -> Customer:
         with self.db.cursor() as cursor:
-            cursor.execute("INSERT INTO customers (customer_name) VALUES (%s) RETURNING customer_id", (customer.customer_name,))
+            cursor.execute("INSERT INTO customers (customer_name) VALUES (%s) RETURNING customer_id ON CONFLICT DO NOTHING", (customer.customer_name,))
             customer.customer_id = cursor.fetchone()[0]
         return customer
 
@@ -341,15 +335,15 @@ class CustomerAliasDAO(DAO):
         with self.db.cursor() as cursor:
             cursor.execute("INSERT INTO customer_alias (alias, customer_id) VALUES (%s, %s)", (alias.alias, alias.customer_id))
 
-    def create_bulk(self, lines: list[CustomerAlias]) -> None:
+    def create_bulk(self, lines: list[CustomerAlias]) -> bool:
         if not lines:
-            return None
+            return False
 
         values = [(ln.alias, ln.customer_id) for ln in lines]
 
         with self.db.cursor() as cursor:
             psycopg2.extras.execute_values(cursor,"INSERT INTO customer_alias (alias, customer_id) VALUES %s ON CONFLICT DO NOTHING", values, page_size=500)
-            return None
+            return True
 
 
     def delete(self, alias: str) -> None:
@@ -677,7 +671,7 @@ class ReportLineDAO(DAO):
 
 class DAOFactory:
 
-    def __init__(self, db):
+    def __init__(self, db: DBConnector):
         self.db = db
         self.customers = CustomerDAO(db)
         self.customer_aliases = CustomerAliasDAO(db)
