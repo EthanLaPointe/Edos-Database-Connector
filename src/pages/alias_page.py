@@ -66,10 +66,10 @@ class AliasMappingModel(QAbstractTableModel):
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid():
             return None
-        
+
         col = index.column()
         row_data = self._mappings.iloc[index.row()]
-        
+
         if role == Qt.DisplayRole:
             if col == COL_ALIAS:
                 return str(row_data["alias"])
@@ -79,37 +79,57 @@ class AliasMappingModel(QAbstractTableModel):
                 code = int(row_data["status"])
                 return {0: "Valid", 1: "Duplicate", 2: "Customer Not Found",
                         3: "Error", 4: "Inserted"}.get(code, "Unknown")
-                
+
         if role == Qt.ForegroundRole and col == COL_STATUS:
             code = int(row_data["status"])
             key = {0: "valid", 1: "duplicate", 2: "error",
                    3: "error", 4: "success"}.get(code, "error")
             return QColor(STATUS_COLORS.get(key, "#ef4444"))
-        
+
         if role == Qt.TextAlignmentRole and col == COL_STATUS:
             return Qt.AlignCenter
-        
+
         return None
 
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
+    def header_data(
+        self, section: int,
+        orientation: Qt.Orientation,
+        role: Qt.ItemDataRole=Qt.DisplayRole,
+        ) -> str | None:
+        """Retrieve the header of a section.
+
+        Args:
+            section (_type_): _description_
+            orientation (_type_): _description_
+            role (_type_, optional): _description_. Defaults to Qt.DisplayRole.
+
+        Returns:
+            str | None: str of header name or none if section not in HEADERS.
+
+        """
         if orientation == Qt.Horizontal and role == Qt.DisplayRole:
             return self.HEADERS[section]
         return None
-    
-    def load(self, df: pd.DataFrame):
-        """Replace the entire dataset"""
+
+    def load(self, df: pd.DataFrame) -> None:
+        """Load a dataframe into the table model.
+
+        Args:
+            df (pd.DataFrame): DataFrame to be loaded
+
+        """
         self.beginResetModel()
         df.columns = ["alias", "parent", "status"]
         self._mappings = df.reset_index(drop=True)
         self.endResetModel()
-        
-    def update_row(self, row: int, code: int):
-        """Patch a single status cell"""
-        self._mappings.at[row, "status"] = code
+
+    def update_row(self, row: int, code: int) -> None:
+        """Patch a single status cell."""
+        self._mappings.loc[row, "status"] = code
         idx = self.index(row, COL_STATUS)
         self.dataChanged.emit(idx, idx, [Qt.DisplayRole, Qt.ForegroundRole])
-        
-    def update_rows(self, rows: list[int], code: int):
+
+    def update_rows(self, rows: list[int], code: int) -> None:
         """Patch multiple status cells and emit a single range update."""
         if not rows:
             return
@@ -118,14 +138,14 @@ class AliasMappingModel(QAbstractTableModel):
         top = self.index(rows[0], COL_STATUS)
         bottom = self.index(rows[-1], COL_STATUS)
         self.dataChanged.emit(top, bottom, [Qt.DisplayRole, Qt.ForegroundRole])
-    
+
     def unknown_customers(self) -> set[str]:
-        """Returns a set of customer names that are not present in the database"""
+        """Return a set of customer names that are not present in the database."""
         mask = self._mappings["status"] == 2
         return set(self._mappings.loc[mask, "parent"])
-    
-    def mark_customers_inserted(self, names: set[str]):
-        """Mark previously unknown customers as pending to be checked again"""
+
+    def mark_customers_inserted(self, names: set[str]) -> None:
+        """Mark previously unknown customers as pending to be checked again."""
         mask = self._mappings["parent"].isin(names) & (self._mappings["status"] == 2)
         self._mappings.loc[mask, "status"] = 0
         if mask.any():
@@ -133,8 +153,12 @@ class AliasMappingModel(QAbstractTableModel):
             top = self.index(rows[0], COL_STATUS)
             btm = self.index(rows[-1], COL_STATUS)
             self.dataChanged.emit(top, btm, [Qt.DisplayRole, Qt.ForegroundRole])
-        
-    def clear(self):
+
+    def clear(self) -> None:
+        """Reset current table model and rename empty table columns.
+
+        Columns renamed to ["alias", "parent", "status"]
+        """
         self.beginResetModel()
         self._mappings = pd.DataFrame(columns=["alias", "parent", "status"])
         self.endResetModel()
@@ -144,14 +168,11 @@ class _Task(Enum):
     CHECK = auto()          # Re-validate currently loaded mappings
     INSERT_UNKNOWN = auto() # Bulk create unknown customers
     INSERT = auto()         # Insert alias mappings
-    
-
 
 # Alias Worker
 class AliasWorker(QThread):
-    """
-    All database access and file I/O happens within run(), on the worker thread.
-    
+    """All database access and file I/O happens within run(), on the worker thread.
+
     Signals
     -------
     check_done(mappings, valid) - emitted after READ_AND_CHECK or CHECK
@@ -159,58 +180,73 @@ class AliasWorker(QThread):
     all_done(success)           - emitted after INSERT
     error(message)              - emitted on unexpected exception
     """
-    
+
     check_done = Signal(pd.DataFrame, bool)
     unknown_insert_done = Signal()
     all_done = Signal(bool)
     error = Signal(str)
-    
-    def __init__(self, cache: DataCache):
+
+    def __init__(self, cache: DataCache) -> None:
+        """Initialize a new AliasWorker isntance.
+
+        Args:
+            cache (DataCache): The DataCache of the main app
+
+        """
         super().__init__()
         self.cache = cache
         self.mappings: pd.DataFrame = pd.DataFrame()
         self._task: _Task | None = None
         self._path: str | None = None
         self._unknown_names: set[str] = set()
-        
-    
-        
-    def read_file(self, path: str):
-        """Read csv file located at path"""
+
+    def read_file(self, path: str) -> None:
+        """Read csv file located at path."""
         self.mappings = self._handler.read_mappings(path)
-       
-    def check(self):
-        """Check validity of mappings file and mapping pairs"""
+
+    def check(self) -> None:
+        """Check validity of mappings file and mapping pairs.
+
+        Emits (self.mappings: DataFrame, valid: Bool)
+        """
         self.mappings, valid = self._handler.check_mappings(self.mappings)
         self.check_done.emit(self.mappings, valid)
-        
-    def insert_unknown_customers(self, names: set[str]):
+
+    def insert_unknown_customers(self, names: set[str]) -> None:
         """Insert each unknown name as a new customer in the database.
-        Calls check after insertion"""
-        customer_list: list[Customer] = []
-        for name in names:
-            customer_list.append(Customer(customer_id=None, customer_name=name))
-            
+
+        Calls check() after insertion
+        """
+        customer_list: list[Customer] = [Customer(customer_id=None, customer_name=name)
+                                         for name in names]
+
         self._factory.customers.create_bulk(customer_list)
         self.cache.refresh()
         self.unknown_insert_done.emit()
-        
-    def insert(self):
-        """Insert mapping list and refresh cache upon successful insertion"""
-        
+
+    def insert(self) -> None:
+        """Insert mapping list and refresh cache upon successful insertion.
+
+        Emits (success: bool)
+        """
         # Drop any rows containing duplicate aliases
         filtered_mappings = self.mappings[self.mappings["status"] != 1]
         filtered_mappings = filtered_mappings.drop(columns=["status"])
         success = self._handler.insert_alias_mappings(filtered_mappings)
         self.cache.refresh()
-    
+
         self._handler = None
         self._factory = None
         self.connector.close()
         self.all_done.emit(success)
-        
+
 # Alias Upload Page
 class AliasPage(QWidget):
+    """_summary_
+
+    Args:
+        QWidget (_type_): _description_
+    """
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
