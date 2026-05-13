@@ -3,7 +3,7 @@ from PySide6.QtCore import Signal
 from pages.LoginPage import LoginPage
 from pages.HomePage import HomePage
 from pages.ReportPage import ReportPage
-from pages.AliasPage import AliasPage
+from alias_page import AliasPage
 from DBConnection import *
 from DataCache import DataCache
 
