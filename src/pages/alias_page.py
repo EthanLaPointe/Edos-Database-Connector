@@ -5,7 +5,14 @@ from pathlib import Path
 from typing import ClassVar
 
 import pandas as pd
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QThread, Signal
+from PySide6.QtCore import (
+    QAbstractTableModel,
+    QModelIndex,
+    QObject,
+    Qt,
+    QThread,
+    Signal,
+)
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -52,12 +59,25 @@ class AliasMappingModel(QAbstractTableModel):
 
     HEADERS: ClassVar[list[str]] = ["Alias", "Customer Name", "Status"]
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent: QObject=None) -> None:
+        """Initialize mapping model.
+
+        Args:
+            parent (QObject, optional): _description_. Defaults to None.
+
+        """
         super().__init__(parent)
         self._mappings: pd.DataFrame = pd.DataFrame(columns=["alias", "parent", "status"])
 
     # Qt Overrides
-    def rowCount(self, parent=QModelIndex()):
+    def rowCount(self) -> int:
+        """Get row count of the current table.
+
+        Returns:
+            int: Number of rows in table
+
+        """
+        parent=QModelIndex()
         return 0 if parent.isValid() else len(self._mappings)
 
     def columnCount(self, parent=QModelIndex()):

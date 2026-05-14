@@ -1,25 +1,39 @@
-import os
-from pathlib import Path
-from collections import Counter
+"""Contains implementation for ReportPage class and any related worker classes."""
 
-from PySide6.QtWidgets import (
-    QWidget, QFrame, QHBoxLayout, QVBoxLayout,
-    QLabel, QScrollArea, QPushButton, QMessageBox, 
-    QListWidget, QFileDialog, QListWidgetItem,
-)
+from collections import Counter
+from pathlib import Path
+
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QColor
-
-from pages.Sidebar import Sidebar
-from pages.ReportFlagDialog import (
-    ReportFlagDialog,
-    RESULT_CODES, STATUS_COLORS, CODE_TO_STATUS, RESOLVABLE_CODES,
-    ROLE_FILEPATH, ROLE_CODE,
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
-from src.FileHandler import FileHandler
-from src.Report import Report
-from src.DBConnection import *
+
 from DataCache import DataCache
+from pages.ReportFlagDialog import (
+    CODE_TO_STATUS,
+    RESOLVABLE_CODES,
+    RESULT_CODES,
+    ROLE_CODE,
+    ROLE_FILEPATH,
+    STATUS_COLORS,
+    ReportFlagDialog,
+)
+from pages.Sidebar import Sidebar
+from src.DBConnection import *
+from src.FileHandler import FileHandler
+from src.report import Report
+
 
 class InsertWorker(QThread):
     # 0 - Success

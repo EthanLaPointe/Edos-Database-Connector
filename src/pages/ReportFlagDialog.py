@@ -1,19 +1,28 @@
-from pathlib import Path
-from functools import partial
 import traceback
- 
-from PySide6.QtWidgets import (
-    QWidget, QFrame, QHBoxLayout, QVBoxLayout, QFormLayout,
-    QLabel, QLineEdit, QPushButton, QScrollArea, QSizePolicy, 
-    QDialog, QCompleter,
-)
-from PySide6.QtCore import Qt, Signal, QStringListModel
+from functools import partial
+from pathlib import Path
+
+from PySide6.QtCore import QStringListModel, Qt, Signal
 from PySide6.QtGui import QFont
- 
-from src.FileHandler import FileHandler
-from src.Report import Report
+from PySide6.QtWidgets import (
+    QCompleter,
+    QDialog,
+    QFormLayout,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+
 from DataCache import DataCache
 from src.DBConnection import *
+from src.FileHandler import FileHandler
+from src.report import Report
 
 # Shared Constants
 RESULT_CODES: dict[int, tuple[str, str, bool]] = {

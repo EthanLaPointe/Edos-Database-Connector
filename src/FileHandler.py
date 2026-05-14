@@ -1,11 +1,13 @@
 import csv
-import pandas as pd
-import numpy as np
-from Report import Report
-from DBConnection import *
-from DataCache import DataCache
 from decimal import Decimal
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from DataCache import DataCache
+from DBConnection import *
+from report import Report
 
 # List of fields a report must contain
 REPORT_FIELD_LIST = ["customername", "city", "state", "stockcode", "productfam", "productdesc", "quantity", "saledate",
