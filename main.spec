@@ -19,7 +19,7 @@ a = Analysis(
         'DBConnection',
         'DataCache',
         'FileHandler',
-        'Report',
+        'report',
         'PySide6',
     ],
     hookspath=[],

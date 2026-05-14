@@ -1,15 +1,16 @@
-from ctypes.wintypes import HCURSOR
-
-import psycopg2
-import psycopg2.extras
+import contextlib
 import json
 import os
 import sys
-import contextlib
-from functools import reduce
+from collections.abc import Iterator
+from ctypes.wintypes import HCURSOR
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Optional, Iterator, TypeVar, Any
+from functools import reduce
+from typing import Any, Optional, TypeVar
+
+import psycopg2
+import psycopg2.extras
 
 T = TypeVar("T")
 
