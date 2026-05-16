@@ -1,3 +1,9 @@
+"""Module containing FileHandler class implementation.
+
+Used for the cleaning, validation, and insertion, of report files into the database.
+Also used for the reading, cleaning, validation, and insertion, of alias mapping files.
+"""
+
 import csv
 from decimal import Decimal
 from pathlib import Path

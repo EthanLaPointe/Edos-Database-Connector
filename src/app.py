@@ -23,7 +23,14 @@ class App(QMainWindow):
 
     cache_updated = Signal(DataCache)
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize main app window.
+
+        Set window title and minimum size.
+        Initialize class variables to default values.
+        Load page classes into stack.
+        Check connection status and display home_page or login_page accordingly.
+        """
         super().__init__()
         self.setWindowTitle("Edos Database Connector")
         self.setMinimumSize(800, 600)
@@ -63,30 +70,47 @@ class App(QMainWindow):
             self.show_page(self.login_page)
 
     # Page Navigation
-    def show_page(self, page: QWidget):
+    def show_page(self, page: QWidget) -> None:
+        """Display specified page from within stack.
+
+        Calls on_show() if page contains on_show() method.
+
+        Args:
+            page (QWidget):
+                The page to be displayed.
+
+        """
         self.stack.setCurrentWidget(page)
         if hasattr(page, "on_show"):
             page.on_show()
-            
-    def login(self, username: str):
+
+    def login(self, username: str) -> None:
+        """Login to home page and initialize connection dependant variables.
+
+        Sets current user to username. Initializes factory and cache.
+        Emits cache_updated signal to send cache reference to pages.
+        Displays home_page.
+
+        Args:
+            username (str): Username of the current user logging in
+
+        """
         self.current_user = username
         self.factory = DAOFactory(self.connector)
         self.cache = DataCache(self.factory)
         self.cache_updated.emit(self.cache)
         self.show_home()
-        
-    def logout(self):
+
+    def logout(self) -> None:
+        """Set current_user to None and display login_page."""
         self.current_user = None
         self.show_page(self.login_page)
-        
-    def show_home(self):
+
+    def show_home(self) -> None:  # noqa: D102
         self.show_page(self.home_page)
-        
-    def show_report(self):
+
+    def show_report(self) -> None:  # noqa: D102
         self.show_page(self.report_page)
-        
-    def show_alias(self):
+
+    def show_alias(self) -> None:  # noqa: D102
         self.show_page(self.alias_page)
-        
-        
-        

@@ -31,7 +31,7 @@ from pages.ReportFlagDialog import (
 )
 from pages.Sidebar import Sidebar
 from src.DBConnection import *
-from src.FileHandler import FileHandler
+from src.file_handler import FileHandler
 from src.report import Report
 
 

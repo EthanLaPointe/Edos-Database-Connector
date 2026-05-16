@@ -21,16 +21,20 @@ from PySide6.QtWidgets import (
 
 from DataCache import DataCache
 from src.DBConnection import *
-from src.FileHandler import FileHandler
+from src.file_handler import FileHandler
 from src.report import Report
 
 # Shared Constants
 RESULT_CODES: dict[int, tuple[str, str, bool]] = {
-    0: ("Success",               "Report inserted successfully.",                                        False),
-    1: ("Manufacturer Unknown",  "The manufacturer could not be identified.",                            True),
-    2: ("Unknown Aliases",       "Unknown customer aliases were encountered in the report.",              True),
-    3: ("Report Already Present","Report for this manufacturer and period already present in database.",  True),
-    4: ("Insert Cancelled",      "Insert operation was cancelled.",                                      False),
+    0: ("Success", "Report inserted successfully.", False),
+    1: ("Manufacturer Unknown", "The manufacturer could not be identified.", True),
+    2: ("Unknown Aliases", "Unknown customer aliases were encountered in the report.",
+        True,
+    ),
+    3: ("Report Already Present",
+        "Report for this manufacturer and period already present in database.", True,
+    ),
+    4: ("Insert Cancelled", "Insert operation was cancelled.", False),
 }
  
 STATUS_COLORS: dict[str, str] = {
@@ -40,7 +44,7 @@ STATUS_COLORS: dict[str, str] = {
     "warning":    "#f59e0b",
     "error":      "#ef4444",
 }
- 
+
 CODE_TO_STATUS: dict[int, str] = {
     0: "success",
     1: "warning",
@@ -48,7 +52,7 @@ CODE_TO_STATUS: dict[int, str] = {
     3: "warning",
     4: "error",
 }
- 
+
 # Codes for which the user can open the resolution dialog
 RESOLVABLE_CODES: frozenset[int] = frozenset({1, 2, 3})
  

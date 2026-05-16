@@ -33,11 +33,10 @@ import pages.Sidebar
 from DataCache import DataCache
 from DBConnection import (
     Customer,
-    CustomerAlias,
     DAOFactory,
     DBConnector,
 )
-from FileHandler import FileHandler
+from src.file_handler import MAPPING_CODES, FileHandler
 
 # Table Column Indices
 COL_ALIAS = 0
@@ -67,10 +66,11 @@ class AliasMappingModel(QAbstractTableModel):
 
         """
         super().__init__(parent)
-        self._mappings: pd.DataFrame = pd.DataFrame(columns=["alias", "parent", "status"])
+        self._mappings: pd.DataFrame = pd.DataFrame(columns=["alias", "parent",
+                                                             "status"])
 
     # Qt Overrides
-    def rowCount(self) -> int:
+    def row_count(self) -> int:
         """Get row count of the current table.
 
         Returns:
@@ -80,7 +80,9 @@ class AliasMappingModel(QAbstractTableModel):
         parent=QModelIndex()
         return 0 if parent.isValid() else len(self._mappings)
 
-    def columnCount(self, parent=QModelIndex()):
+    def column_count(self, parent) -> int:  # noqa: D102
+        if parent is None:
+            parent = QModelIndex()
         return 0 if parent.isValid() else 3
 
     def data(self, index, role=Qt.DisplayRole):
@@ -161,12 +163,15 @@ class AliasMappingModel(QAbstractTableModel):
 
     def unknown_customers(self) -> set[str]:
         """Return a set of customer names that are not present in the database."""
-        mask = self._mappings["status"] == 2
+        mask = self._mappings["status"] == MAPPING_CODES["unknown customer"]
         return set(self._mappings.loc[mask, "parent"])
 
     def mark_customers_inserted(self, names: set[str]) -> None:
         """Mark previously unknown customers as pending to be checked again."""
-        mask = self._mappings["parent"].isin(names) & (self._mappings["status"] == 2)
+        mask = (
+                self._mappings["parent"].isin(names) &
+                self._mappings["status"] == MAPPING_CODES["unknown customer"]
+        )
         self._mappings.loc[mask, "status"] = 0
         if mask.any():
             rows = self._mappings.index[mask]
@@ -195,10 +200,14 @@ class AliasWorker(QThread):
 
     Signals
     -------
-    check_done(mappings, valid) - emitted after READ_AND_CHECK or CHECK
-    unknown_insert_done()       - emitted after INSERT_UNKNOWN
-    all_done(success)           - emitted after INSERT
-    error(message)              - emitted on unexpected exception
+    check_done(mappings, valid):
+        emitted after READ_AND_CHECK or CHECK
+    unknown_insert_done():
+        emitted after INSERT_UNKNOWN
+    all_done(success):
+        emitted after INSERT
+    error(message):
+        emitted on unexpected exception
     """
 
     check_done = Signal(pd.DataFrame, bool)
@@ -220,54 +229,105 @@ class AliasWorker(QThread):
         self._path: str | None = None
         self._unknown_names: set[str] = set()
 
-    def read_file(self, path: str) -> None:
-        """Read csv file located at path."""
-        self.mappings = self._handler.read_mappings(path)
+    def run(self) -> None:
+        """Start the worker and delegate to correct private method.
 
-    def check(self) -> None:
-        """Check validity of mappings file and mapping pairs.
-
-        Emits (self.mappings: DataFrame, valid: Bool)
+        Opens and closes its own DB connection.
+        Calls the appropriate private method based on self._task.
+        Unhandled exceptions emit error() and all_done(False) if in INSERT.
         """
-        self.mappings, valid = self._handler.check_mappings(self.mappings)
+        connector = DBConnector()
+        try:
+            connector.connect()
+            factory = DAOFactory(connector)
+            handler = FileHandler(factory, self.cache)
+
+            if self._task == _Task.READ_AND_CHECK:
+                self._read_and_check(handler)
+            elif self._task == _Task.CHECK:
+                self._check(handler)
+            elif self._task == _Task.INSERT_UNKNOWN:
+                self._insert_unknown(factory)
+            elif self._task == _Task.INSERT:
+                self._insert(handler)
+
+        except Exception as e:
+            self.error.emit(str(e))
+            if self._task == _Task.INSERT:
+                self.all_done.emit(False)
+
+        finally:
+            connector.close()
+
+    # Private Worker Tasks
+
+    def _read_and_check(self, handler: FileHandler) -> None:
+        self.mappings = handler.read_mappings(self._path)
+        self.mappings, valid = handler.check_mappings(self.mappings)
         self.check_done.emit(self.mappings, valid)
 
-    def insert_unknown_customers(self, names: set[str]) -> None:
-        """Insert each unknown name as a new customer in the database.
+    def _check(self, handler: FileHandler) -> None:
+        self.mappings, valid = handler.check_mappings(self.mappings)
+        self.check_done.emit(self.mappings, valid)
 
-        Calls check() after insertion
-        """
-        customer_list: list[Customer] = [Customer(customer_id=None, customer_name=name)
-                                         for name in names]
-
-        self._factory.customers.create_bulk(customer_list)
+    def _insert_unknown(self, factory: DAOFactory) -> None:
+        customer_list = [
+            Customer(customer_id=None, customer_name=name)
+            for name in self._unknown_names
+        ]
+        factory.customer.create_bulk(customer_list)
         self.cache.refresh()
         self.unknown_insert_done.emit()
 
-    def insert(self) -> None:
-        """Insert mapping list and refresh cache upon successful insertion.
-
-        Emits (success: bool)
-        """
-        # Drop any rows containing duplicate aliases
-        filtered_mappings = self.mappings[self.mappings["status"] != 1]
-        filtered_mappings = filtered_mappings.drop(columns=["status"])
-        success = self._handler.insert_alias_mappings(filtered_mappings)
+    def _insert(self, handler: FileHandler) -> None:
+        filtered = (
+            self.mappings[self.mappings["status"] != 1]
+            .drop(columns=["status"])
+        )
+        success = handler.insert_alias_mappings(filtered)
         self.cache.refresh()
-
-        self._handler = None
-        self._factory = None
-        self.connector.close()
         self.all_done.emit(success)
+
+    # Public worker methods
+
+    def start_read_and_check(self, path:str) -> None:
+        """Read csv at path and validate. Emits check_done."""
+        self._path = path
+        self._task = _Task.READ_AND_CHECK
+        self.start()
+
+    def start_check(self) -> None:
+        """Re-validate already loaded mappings. Emits check_done."""
+        self._task = _Task.CHECK
+        self.start()
+
+    def start_insert_unknown(self, names: set[str]) -> None:
+        """Bulk insert unknown customer names. Emits unknown_insert_done."""
+        self._unknown_names = names
+        self._task = _Task.INSERT_UNKNOWN
+        self.start()
+
+    def start_insert(self) -> None:
+        """Insert alias mappings. Emits all_done."""
+        self._task = _Task.INSERT
+        self.start()
 
 # Alias Upload Page
 class AliasPage(QWidget):
-    """_summary_
+    """Class for displaying and handling of alias mapping files."""
 
-    Args:
-        QWidget (_type_): _description_
-    """
-    def __init__(self, controller):
+    def __init__(self, controller) -> None:  # noqa: ANN001
+        """Initialize alias page.
+
+        Set variables to default values.
+        Connect controller cache_updated signal to internal handling.
+        Build page UI.
+
+        Args:
+            controller:
+                The main app the page is being created within.
+
+        """
         super().__init__()
         self.controller = controller
         self._cache: DataCache | None = None
@@ -275,65 +335,67 @@ class AliasPage(QWidget):
         controller.cache_updated.connect(self._on_cache_updated)
         self._mappings: pd.DataFrame
         self._build_ui()
-        
+
     # UI Builder
-    def _build_ui(self):
+    def _build_ui(self) -> None:  # noqa: PLR0915
+        """Build all UI elements and set spacing and sizing."""
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        
-        self.sidebar = pages.Sidebar.Sidebar(controller=self.controller, active_page="alias")
+
+        self.sidebar = pages.Sidebar.Sidebar(controller=self.controller,
+                                             active_page="alias")
         root.addWidget(self.sidebar)
-        
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         root.addWidget(scroll)
-        
+
         content = QWidget()
         content.setObjectName("content")
         scroll.setWidget(content)
-        
+
         layout = QVBoxLayout(content)
         layout.setContentsMargins(32, 28, 32, 28)
         layout.setSpacing(0)
-        
+
         # Header
         title = QLabel("Upload Alias Mappings")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         layout.addSpacing(4)
-        
+
         sub = QLabel(
             "Select a CSV file with two columns: alias and customer name."
-            "Preview the mappings below, then click Insert to save them."
+            "Preview the mappings below, then click Insert to save them.",
         )
         sub.setObjectName("subtitle")
         sub.setWordWrap(True)
         layout.addWidget(sub)
         layout.addSpacing(28)
-        
+
         # File Selection
         layout.addWidget(self._section_label("Select File"))
         layout.addSpacing(8)
-        
+
         file_frame = QFrame()
         file_frame.setObjectName("formSection")
         file_layout = QVBoxLayout(file_frame)
         file_layout.setContentsMargins(20, 20, 20, 20)
         file_layout.setSpacing(12)
-        
+
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
-        
+
         self.choose_btn = QPushButton("Choose CSV File")
         self.choose_btn.setMinimumHeight(42)
         self.choose_btn.setCursor(Qt.PointingHandCursor)
         self.choose_btn.clicked.connect(self._choose_file)
         btn_row.addWidget(self.choose_btn)
-        
+
         btn_row.addStretch()
-        
+
         self.clear_btn = QPushButton("Clear")
         self.clear_btn.setObjectName("cancelBtn")
         self.clear_btn.setMinimumHeight(42)
@@ -341,51 +403,54 @@ class AliasPage(QWidget):
         self.clear_btn.setEnabled(False)
         self.clear_btn.clicked.connect(self._clear)
         btn_row.addWidget(self.clear_btn)
-        
+
         file_layout.addLayout(btn_row)
-        
+
         self.file_label = QLabel("No file selected.")
         self.file_label.setObjectName("subtitle")
         file_layout.addWidget(self.file_label)
-        
+
         layout.addWidget(file_frame)
         layout.addSpacing(24)
-        
+
         # Preview Table
         layout.addWidget(self._section_label("Mapping Preview"))
         layout.addSpacing(4)
-        
-        hint = QLabel("Two-column CSV: first column alias, second column customer name.")
+
+        hint = QLabel("Two-column CSV: first column alias, second column parent name.")
         hint.setObjectName("hintLabel")
         layout.addWidget(hint)
         layout.addSpacing(6)
-        
+
         table_frame = QFrame()
         table_frame.setObjectName("formSection")
         table_layout = QVBoxLayout(table_frame)
         table_layout.setContentsMargins(16, 16, 16, 16)
-        
+
         self._model = AliasMappingModel(self)
-        
+
         self.table = QTableView()
         self.table.setModel(self._model)
-        self.table.horizontalHeader().setSectionResizeMode(COL_ALIAS, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(COL_CUSTOMER, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(COL_STATUS, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(COL_ALIAS,
+                                                           QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(COL_CUSTOMER,
+                                                           QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(COL_STATUS,
+                                                           QHeaderView.ResizeToContents)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setMinimumHeight(260)
         self.table.setObjectName("aliasTable")
         table_layout.addWidget(self.table)
-        
+
         layout.addWidget(table_frame)
         layout.addSpacing(24)
-        
+
         # Submit Row
         submit_row = QHBoxLayout()
         submit_row.addStretch()
-        
+
         self.unknown_btn = QPushButton("Insert Unknown Customers")
         self.unknown_btn.setMinimumSize(200, 44)
         self.unknown_btn.setCursor(Qt.PointingHandCursor)
@@ -393,60 +458,86 @@ class AliasPage(QWidget):
         self.unknown_btn.setObjectName("secondaryBtn")
         self.unknown_btn.clicked.connect(self._handle_insert_unknown)
         submit_row.addWidget(self.unknown_btn)
-        
+
         submit_row.addSpacing(10)
-        
+
         self.insert_btn = QPushButton("Insert Mappings")
         self.insert_btn.setMinimumSize(180, 44)
         self.insert_btn.setCursor(Qt.PointingHandCursor)
         self.insert_btn.setEnabled(False)
         self.insert_btn.clicked.connect(self._handle_insert)
         submit_row.addWidget(self.insert_btn)
-        
+
         layout.addLayout(submit_row)
         layout.addStretch()
-        
+
+    # Worker Setup
+
+    def _create_worker(self) -> AliasWorker:
+        """Create a new worker instance.
+
+        Discard and previous workers, create a new one, and wire all signals.
+        """
+        self._discard_worker()
+
+        worker = AliasWorker(self._cache)
+        worker.check_done.connect(self._on_check_done)
+        worker.unknown_insert_done.connect(self._on_unknown_inserted)
+        worker.all_done.connect(self._on_all_done)
+        worker.error.connect(self._on_worker_error)
+        return worker
+
+    def _discard_worker(self) -> None:
+        """Wait for any running worker to finish before discarding."""
+        if self.worker is not None:
+            if self.worker.isRunning():
+                self.worker.wait()
+            self.worker = None
+
     # File Selection & Parsing
-    def _choose_file(self):
+    def _choose_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select Alias CSV", "", "CSV Files (*.csv);;All FIles (*)"
+            self, "Select Alias CSV", "", "CSV Files (*.csv);;All FIles (*)",
         )
         if not path:
             return
-        
+
         self.file_label.setText(f"{Path(path).name}")
-        self.worker = AliasWorker(self._cache)
-        self.worker.check_done.connect(self._on_check_done)
-        self.worker.read_file(path)
-        self.worker.check()
-        
+        self._lock_ui(locked=True)
+
+        self.worker = self._create_worker()
+        self.worker.start_read_and_check(path)
+
     # Table
-    def _populate_table(self, mappings: pd.DataFrame):
+    def _populate_table(self, mappings: pd.DataFrame) -> None:
         self._model.load(mappings)
-            
-    def _set_row_status(self, row: int, code: int):
-        self._model.update_row(row, code)
-        
-    # Clear    
-    def _clear(self):
+
+    # Clear
+    def _clear(self) -> None:
         if self.worker and self.worker.isRunning():
             return
+        self._discard_worker()
         self._model.clear()
         self._mappings = pd.DataFrame()
         self.file_label.setText("No file selected.")
         self.clear_btn.setEnabled(False)
         self.insert_btn.setEnabled(False)
-        
+        self.unknown_btn.setEnabled(False)
+
     # Insert
-    def _handle_insert(self):
-         self.worker.all_done.connect(self._on_all_done)
-         self.worker.insert()
-    
-    def _handle_insert_unknown(self):
+    def _handle_insert(self) -> None:
+         self._lock_ui(locked=True)
+         self.worker.start_insert()
+
+    def _handle_insert_unknown(self) -> None:
         unknown = self._model.unknown_customers()
         if not unknown:
-            QMessageBox.information(self, "Nothing to Insert", "No unknown customers found in the current mapping")
-            
+            QMessageBox.information(
+                self, "Nothing to Insert",
+                "No unknown customers found in the current mapping",
+            )
+            return
+
         reply = QMessageBox.question(
             self,
             "Insert Unknown Customers",
@@ -456,89 +547,84 @@ class AliasPage(QWidget):
         )
         if reply != QMessageBox.Yes:
             return
-        
-        self._lock_ui(True)
+
+        self._lock_ui(locked=True)
         self.unknown_btn.setText("Inserting Customers...")
-        
-        self.worker.unknown_insert_done.connect(self._on_unknown_inserted)
-        self.worker.insert_unknown_customers(unknown)
-    
-    def _on_row_done(self, row: int, code: int):
-        self._set_row_status(row, code)
-        
-    def _on_check_done(self, mappings: pd.DataFrame, valid: bool):
-        
+        self.worker.start_insert_unknown(unknown)
+
+    def _on_check_done(self, mappings: pd.DataFrame, *, valid: bool) -> None:
+
         if not valid:
-            QMessageBox.warning(self, "Invalid File", "Selected file is not a valid alias mapping file")
+            QMessageBox.warning(
+                self,
+                "Invalid File",
+                "Selected file is not a valid alias mapping file",
+            )
             return
-        
+
         self._mappings = mappings.reset_index(drop=True)
         self._populate_table(self._mappings)
         self.clear_btn.setEnabled(True)
+
         has_unknown = bool(self._model.unknown_customers())
         self.insert_btn.setEnabled(not has_unknown)
         self._refresh_unknown_btn()
-        
-    def _on_all_done(self, success: bool):
-        self._lock_ui(False)
-            
+
+    def _on_all_done(self, *, success: bool) -> None:
+        self._lock_ui(locked=False)
+
         msg = QMessageBox(self)
-        
+
         if success:
-            rows_to_update: list[int] = []
-            for i, alias, _, _ in self._mappings.itertuples(index=True):
-                if alias in self._cache.customer_aliases:
-                    rows_to_update.append(i)
+            rows_to_update: list[int] = [
+                row_num
+                for row_num, (_, row) in enumerate(self._mappings.iterrows())
+                if row["alias"] in self._cache.customer_aliases
+            ]
             self._model.update_rows(rows_to_update, 4)
-            
+
             msg.setWindowTitle("Insert Complete")
             msg.setIcon(QMessageBox.Information)
             msg.setText(f"Processed {self._model.rowCount()} mapping(s).")
-            msg.setStandardButtons(QMessageBox.Ok)
-            msg.exec()
-            
-            self.insert_btn.setEnabled(False)
-            self._refresh_unknown_btn()
         else:
             msg.setWindowTitle("Insert Failed")
             msg.setIcon(QMessageBox.Information)
             msg.setText("Failed to insert chosen mapping file")
-            msg.setStandardButtons(QMessageBox.Ok)
-            msg.exec()
-            
-            self.insert_btn.setEnabled(False)
-            self._refresh_unknown_btn()
-        
-    def _on_unknown_inserted(self):
-        self._lock_ui(False)
-        self.unknown_btn.setText("Insert Unknown Customers")
-        self.worker.check()
-        
+
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.exec()
+
+        self.insert_btn.setEnabled(False)
         self._refresh_unknown_btn()
-        
-    def _refresh_unknown_btn(self):
+
+    def _on_unknown_inserted(self) -> None:
+        self._lock_ui(locked=True)
+        self.unknown_btn.setText("Insert Unknown Customers")
+        self.worker.start_check()
+
+    def _refresh_unknown_btn(self) -> None:
         """Enable the unknown customers button only when unknowns exist."""
         has_unknown = bool(self._model.unknown_customers())
         self.unknown_btn.setEnabled(has_unknown)
-    
-    def _on_cache_updated(self, cache: DataCache):
+
+    def _on_cache_updated(self, cache: DataCache) -> None:
         self._cache = cache
-        
         if self.worker:
             self.worker.cache = cache
-    
+
     # Helpers
-    def _lock_ui(self, locked: bool):
+    def _lock_ui(self, *, locked: bool) -> None:
         self.choose_btn.setEnabled(not locked)
         self.clear_btn.setEnabled(not locked)
         self.unknown_btn.setEnabled(not locked)
         self.insert_btn.setEnabled(not locked)
-        
+
     def _section_label(self, text: str) -> QLabel:
         lbl = QLabel(text)
         lbl.setObjectName("sectionTitle")
         return lbl
-    
-    def on_show(self):
+
+    def on_show(self) -> None:
+        """Update user and sidebar to reflect current page."""
         user = self.controller.current_user or "User"
         self.sidebar.update_user(user)
