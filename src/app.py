@@ -8,8 +8,8 @@ from DBConnection import (
     DBConnector,
 )
 from pages.alias_page import AliasPage
-from pages.HomePage import HomePage
-from pages.LoginPage import LoginPage
+from pages.home_page import HomePage
+from pages.login_page import LoginPage
 from pages.report_page import ReportPage
 
 

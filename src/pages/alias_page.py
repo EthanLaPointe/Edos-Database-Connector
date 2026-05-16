@@ -29,13 +29,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-import pages.Sidebar
 from DataCache import DataCache
 from DBConnection import (
     Customer,
     DAOFactory,
     DBConnector,
 )
+from pages.protocols import AppController
+from pages.sidebar import Sidebar
 from src.file_handler import MAPPING_CODES, FileHandler
 
 # Table Column Indices
@@ -70,22 +71,42 @@ class AliasMappingModel(QAbstractTableModel):
                                                              "status"])
 
     # Qt Overrides
-    def row_count(self) -> int:
+    def rowCount(self, parent: QModelIndex) -> int:
         """Get row count of the current table.
 
         Returns:
             int: Number of rows in table
 
         """
-        parent=QModelIndex()
+        if parent is None:
+            parent=QModelIndex()
         return 0 if parent.isValid() else len(self._mappings)
 
-    def column_count(self, parent) -> int:  # noqa: D102
+    def columnCount(self, parent: QModelIndex) -> int:  # noqa: D102
         if parent is None:
             parent = QModelIndex()
         return 0 if parent.isValid() else 3
 
-    def data(self, index, role=Qt.DisplayRole):
+    def data(  # noqa: PLR0911
+        self, index: QModelIndex, role: Qt.ItemDataRole = Qt.DisplayRole,
+    ) -> (str | QColor | Qt.AlignmentFlag | None):
+        """Retrieve cell data or rendering information based on index and role.
+
+        Args:
+            index (QModelIndex):
+                The column to retreive data from
+            role (Qt.ItemDataRole, optional):
+               The specific ItemDataRole to be used when retrieving data.
+               Defaults to Qt.DisplayRole.
+
+        Returns:
+            str (if role == Qt.DisplayRole):
+                Return column data at index as str.
+                Translate status code to label.
+            QColor (if role == Qt.ForegroundRole):
+                Return
+
+        """
         if not index.isValid():
             return None
 
@@ -236,6 +257,7 @@ class AliasWorker(QThread):
         Calls the appropriate private method based on self._task.
         Unhandled exceptions emit error() and all_done(False) if in INSERT.
         """
+        insert_completed = False
         connector = DBConnector()
         try:
             connector.connect()
@@ -251,10 +273,10 @@ class AliasWorker(QThread):
             elif self._task == _Task.INSERT:
                 self._insert(handler)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.error.emit(str(e))
             if self._task == _Task.INSERT:
-                self.all_done.emit(False)
+                self.all_done.emit(insert_completed)
 
         finally:
             connector.close()
@@ -316,7 +338,7 @@ class AliasWorker(QThread):
 class AliasPage(QWidget):
     """Class for displaying and handling of alias mapping files."""
 
-    def __init__(self, controller) -> None:  # noqa: ANN001
+    def __init__(self, controller: AppController) -> None:
         """Initialize alias page.
 
         Set variables to default values.
@@ -324,8 +346,8 @@ class AliasPage(QWidget):
         Build page UI.
 
         Args:
-            controller:
-                The main app the page is being created within.
+            controller (AppController):
+                Protocol containing required methods and attributes from main App.
 
         """
         super().__init__()
@@ -343,7 +365,7 @@ class AliasPage(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        self.sidebar = pages.Sidebar.Sidebar(controller=self.controller,
+        self.sidebar = Sidebar(controller=self.controller,
                                              active_page="alias")
         root.addWidget(self.sidebar)
 
