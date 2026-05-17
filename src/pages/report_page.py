@@ -18,10 +18,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
-from DataCache import DataCache
-from pages.protocols import AppController
-from pages.ReportFlagDialog import (
+from report_flag_dialog import (
     CODE_TO_STATUS,
     RESOLVABLE_CODES,
     RESULT_CODES,
@@ -30,6 +27,9 @@ from pages.ReportFlagDialog import (
     STATUS_COLORS,
     ReportFlagDialog,
 )
+
+from DataCache import DataCache
+from pages.protocols import AppController
 from pages.sidebar import Sidebar
 from src.DBConnection import (
     DAOFactory,

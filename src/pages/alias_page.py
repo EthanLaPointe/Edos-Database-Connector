@@ -71,7 +71,7 @@ class AliasMappingModel(QAbstractTableModel):
                                                              "status"])
 
     # Qt Overrides
-    def rowCount(self, parent: QModelIndex) -> int:
+    def rowCount(self, parent: QModelIndex) -> int:  # noqa: N802
         """Get row count of the current table.
 
         Returns:
@@ -82,7 +82,7 @@ class AliasMappingModel(QAbstractTableModel):
             parent=QModelIndex()
         return 0 if parent.isValid() else len(self._mappings)
 
-    def columnCount(self, parent: QModelIndex) -> int:  # noqa: D102
+    def columnCount(self, parent: QModelIndex) -> int:  # noqa: D102, N802
         if parent is None:
             parent = QModelIndex()
         return 0 if parent.isValid() else 3
