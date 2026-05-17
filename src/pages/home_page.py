@@ -8,9 +8,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from sidebar import Sidebar
 
 from pages.protocols import AppController
-from _sidebar import Sidebar
 
 
 class HomePage(QWidget):

@@ -27,10 +27,10 @@ from report_flag_dialog import (
     STATUS_COLORS,
     ReportFlagDialog,
 )
+from sidebar import Sidebar
 
 from DataCache import DataCache
 from pages.protocols import AppController
-from _sidebar import Sidebar
 from src.DBConnection import (
     DAOFactory,
     DBConnector,

@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from sidebar import Sidebar
 
 from DataCache import DataCache
 from DBConnection import (
@@ -36,7 +37,6 @@ from DBConnection import (
     DBConnector,
 )
 from pages.protocols import AppController
-from _sidebar import Sidebar
 from src.file_handler import MAPPING_CODES, FileHandler
 
 # Table Column Indices
