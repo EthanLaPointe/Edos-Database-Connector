@@ -1,16 +1,16 @@
-"""_summary_."""
+"""To be finished later."""
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QMainWindow, QStackedWidget, QWidget
 
-from DataCache import DataCache
-from DBConnection import (
-    DAOFactory,
-    DBConnector,
-)
 from pages.alias_page import AliasPage
 from pages.home_page import HomePage
 from pages.login_page import LoginPage
 from pages.report_page import ReportPage
+from src.data_cache import DataCache
+from src.db_connection import (
+    DAOFactory,
+    DBConnector,
+)
 
 
 class App(QMainWindow):

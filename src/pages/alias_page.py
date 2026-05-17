@@ -30,13 +30,13 @@ from PySide6.QtWidgets import (
 )
 from sidebar import Sidebar
 
-from DataCache import DataCache
-from DBConnection import (
+from pages.protocols import AppController
+from src.data_cache import DataCache
+from src.db_connection import (
     Customer,
     DAOFactory,
     DBConnector,
 )
-from pages.protocols import AppController
 from src.file_handler import MAPPING_CODES, FileHandler
 
 # Table Column Indices

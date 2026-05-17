@@ -21,8 +21,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from DataCache import DataCache
-from src.DBConnection import (
+from src.data_cache import DataCache
+from src.db_connection import (
     Customer,
     CustomerAlias,
     DAOFactory,

@@ -29,9 +29,9 @@ from report_flag_dialog import (
 )
 from sidebar import Sidebar
 
-from DataCache import DataCache
+from src.data_cache import DataCache
 from pages.protocols import AppController
-from src.DBConnection import (
+from src.db_connection import (
     DAOFactory,
     DBConnector,
 )

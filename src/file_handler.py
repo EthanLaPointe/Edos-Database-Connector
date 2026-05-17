@@ -11,8 +11,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from DataCache import DataCache
-from DBConnection import *
+from src.data_cache import DataCache
+from src.db_connection import *
 from report import Report
 
 # List of fields a report must contain
