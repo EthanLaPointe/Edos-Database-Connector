@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 from pages.protocols import AppController
-from pages.sidebar import Sidebar
+from _sidebar import Sidebar
 
 
 class HomePage(QWidget):

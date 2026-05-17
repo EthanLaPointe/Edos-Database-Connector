@@ -30,7 +30,7 @@ from report_flag_dialog import (
 
 from DataCache import DataCache
 from pages.protocols import AppController
-from pages.sidebar import Sidebar
+from _sidebar import Sidebar
 from src.DBConnection import (
     DAOFactory,
     DBConnector,

@@ -36,7 +36,7 @@ from DBConnection import (
     DBConnector,
 )
 from pages.protocols import AppController
-from pages.sidebar import Sidebar
+from _sidebar import Sidebar
 from src.file_handler import MAPPING_CODES, FileHandler
 
 # Table Column Indices
