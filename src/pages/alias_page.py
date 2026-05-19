@@ -28,9 +28,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from sidebar import Sidebar
 
 from pages.protocols import AppController
+from pages.sidebar import Sidebar
 from src.data_cache import DataCache
 from src.db_connection import (
     Customer,
@@ -71,20 +71,22 @@ class AliasMappingModel(QAbstractTableModel):
                                                              "status"])
 
     # Qt Overrides
-    def rowCount(self, parent: QModelIndex) -> int:  # noqa: N802
+    def rowCount(self, parent=QModelIndex()) -> int:  # noqa: ANN001, B008, N802
         """Get row count of the current table.
 
         Returns:
             int: Number of rows in table
 
         """
-        if parent is None:
-            parent=QModelIndex()
         return 0 if parent.isValid() else len(self._mappings)
 
-    def columnCount(self, parent: QModelIndex) -> int:  # noqa: D102, N802
-        if parent is None:
-            parent = QModelIndex()
+    def columnCount(self, parent=QModelIndex()) -> int:  # noqa: ANN001, B008, N802
+        """Get column count of the current table.
+
+        Returns:
+            int: Number of columns in table
+
+        """
         return 0 if parent.isValid() else 3
 
     def data(  # noqa: PLR0911
@@ -297,7 +299,7 @@ class AliasWorker(QThread):
             Customer(customer_id=None, customer_name=name)
             for name in self._unknown_names
         ]
-        factory.customer.create_bulk(customer_list)
+        factory.customers.create_bulk(customer_list)
         self.cache.refresh()
         self.unknown_insert_done.emit()
 
@@ -498,7 +500,7 @@ class AliasPage(QWidget):
     def _create_worker(self) -> AliasWorker:
         """Create a new worker instance.
 
-        Discard and previous workers, create a new one, and wire all signals.
+        Discard any previous worker, create a new one, and wire all signals.
         """
         self._discard_worker()
 
@@ -507,6 +509,10 @@ class AliasPage(QWidget):
         worker.unknown_insert_done.connect(self._on_unknown_inserted)
         worker.all_done.connect(self._on_all_done)
         worker.error.connect(self._on_worker_error)
+
+        if hasattr(self, "_mappings"):
+            worker.mappings = self._mappings
+
         return worker
 
     def _discard_worker(self) -> None:
@@ -515,6 +521,13 @@ class AliasPage(QWidget):
             if self.worker.isRunning():
                 self.worker.wait()
             self.worker = None
+
+    def _ensure_worker_available(self) -> bool:
+        if self.worker is not None and self.worker.isRunning():
+            return False
+        self.worker = self._create_worker()
+        self._lock_ui(locked=True)
+        return True
 
     # File Selection & Parsing
     def _choose_file(self) -> None:
@@ -548,7 +561,10 @@ class AliasPage(QWidget):
 
     # Insert
     def _handle_insert(self) -> None:
-         self._lock_ui(locked=True)
+         if not self._ensure_worker_available():
+             return
+
+         self.worker.mappings = self._mappings
          self.worker.start_insert()
 
     def _handle_insert_unknown(self) -> None:
@@ -570,13 +586,17 @@ class AliasPage(QWidget):
         if reply != QMessageBox.Yes:
             return
 
-        self._lock_ui(locked=True)
+        if not self._ensure_worker_available():
+            return
+
         self.unknown_btn.setText("Inserting Customers...")
+        self.worker.mappings = self._mappings
         self.worker.start_insert_unknown(unknown)
 
-    def _on_check_done(self, mappings: pd.DataFrame, *, valid: bool) -> None:
+    def _on_check_done(self, mappings: pd.DataFrame, valid: bool) -> None:  # noqa: FBT001
 
         if not valid:
+            self._lock_ui(locked=False)
             QMessageBox.warning(
                 self,
                 "Invalid File",
@@ -592,7 +612,7 @@ class AliasPage(QWidget):
         self.insert_btn.setEnabled(not has_unknown)
         self._refresh_unknown_btn()
 
-    def _on_all_done(self, *, success: bool) -> None:
+    def _on_all_done(self, success: bool) -> None:  # noqa: FBT001
         self._lock_ui(locked=False)
 
         msg = QMessageBox(self)
@@ -622,6 +642,8 @@ class AliasPage(QWidget):
     def _on_unknown_inserted(self) -> None:
         self._lock_ui(locked=True)
         self.unknown_btn.setText("Insert Unknown Customers")
+        self.worker = self._create_worker()
+        self.worker.mappings = self._mappings
         self.worker.start_check()
 
     def _refresh_unknown_btn(self) -> None:
@@ -633,6 +655,13 @@ class AliasPage(QWidget):
         self._cache = cache
         if self.worker:
             self.worker.cache = cache
+
+    def _on_worker_error(self, message: str) -> None:
+        self._lock_ui(locked=False)
+        QMessageBox.critical(
+            self, "Unexpected Error",
+            f"An error occurred while processing:\n\n{message}",
+        )
 
     # Helpers
     def _lock_ui(self, *, locked: bool) -> None:

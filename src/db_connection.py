@@ -72,16 +72,15 @@ class DBConnector:
         else:
             return
 
-    @staticmethod
-    def _credentials_path() -> str:
+    def _credentials_path(self) -> Path:
         if getattr(sys, "frozen", False):
-            base_dir = Path.parent(sys.executable)
+            base_dir = Path(sys.executable).parent
         else:
-            base_dir = Path.parent(__file__)
-        return Path(base_dir) / "credentials.json"
+            base_dir = Path(__file__).parent
+        return base_dir / "credentials.json"
 
-    @staticmethod
     def set_credentials(
+        self,
         database_name: str,
         username: str,
         password: str,
@@ -111,17 +110,16 @@ class DBConnector:
             "port": port,
         }
 
-        file_path = DBConnector._credentials_path()
-        with Path.open(file_path, "w", encoding="utf-8") as f:
+        file_path = self._credentials_path()
+        with file_path.open("w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
-    @staticmethod
-    def check_credentials() -> bool:
+    def check_credentials(self) -> bool:
         """Check if credentials file exists."""
-        return Path.isfile(DBConnector._credentials_path())
+        file_path = self._credentials_path()
+        return file_path.is_file()
 
-    @staticmethod
-    def get_credentials() -> dict[str, str]:
+    def get_credentials(self) -> dict[str, str]:
         """Read credentials file and load into dict.
 
         Returns:
@@ -129,7 +127,8 @@ class DBConnector:
                 dict containing the saved login info.
 
         """
-        with Path.open(DBConnector._credentials_path(), "r", encoding="utf-8") as f:
+        credentials_path = self._credentials_path()
+        with credentials_path.open("r", encoding="utf-8") as f:
             return json.load(f)
 
 #------------------------------------------------------------------

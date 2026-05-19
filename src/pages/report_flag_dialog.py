@@ -239,7 +239,7 @@ class ReportFlagDialog(QDialog):
         except Exception as e:  # noqa: BLE001
             self._show_status(f"Error adding manufacturer: {e}", error=True)
 
-    # Code 2: Uknown Aliases
+    # Code 2: Unknown Aliases
     def _build_aliases_panel(self, layout: QVBoxLayout) -> None:
         unknown_aliases: list[str] = getattr(self.report, "unknown_aliases", [])
 

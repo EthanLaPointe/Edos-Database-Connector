@@ -11,9 +11,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from report import Report
 from src.data_cache import DataCache
 from src.db_connection import *
-from report import Report
 
 # List of fields a report must contain
 REPORT_FIELD_LIST = ["customername", "city", "state", "stockcode", "productfam", "productdesc", "quantity", "saledate",
