@@ -425,7 +425,13 @@ class CustomerDAO(DAO):
         values = [(ln.customer_name,) for ln in lines]
 
         with self.connector.cursor() as cursor:
-            psycopg2.extras.execute_values(cursor,"INSERT INTO customers (customer_name) VALUES %s ON CONFLICT DO NOTHING", values, page_size=500)
+            psycopg2.extras.execute_values(
+                cursor,
+                "INSERT INTO customers (customer_name) "
+                "VALUES %s ON CONFLICT DO NOTHING",
+                values,
+                page_size=500,
+            )
 
     def update(self, customer: Customer) -> None:
         """Update a customer name in the database.
@@ -456,220 +462,628 @@ class CustomerDAO(DAO):
             )
 
 class CustomerAliasDAO(DAO):
+    """To be finished later."""
 
     _table = "customer_alias"
     _pk = "customer_id"
     _select = "SELECT alias, customer_id FROM customer_alias"
 
-    def _from_row(self, row) -> CustomerAlias:
+    def _from_row(self, row: tuple[Any, ...]) -> CustomerAlias:
         return CustomerAlias(row[0], row[1])
 
     def get_by_customer(self, customer_id: int) -> list[CustomerAlias]:
+        """Retrieve all aliases associated with a customers ID.
+
+        Args:
+            customer_id (int):
+                ID of the customer to retrieve aliases for.
+
+        Returns:
+            list[CustomerAlias]:
+                A list of all aliases associated with the custoemr ID.
+
+        """
         with self.connector.cursor() as cursor:
             cursor.execute(f"{self._select} WHERE customer_id = %s", (customer_id,))
             return [CustomerAlias(**row) for row in cursor.fetchall()]
 
     def create(self, alias: CustomerAlias) -> None:
+        """Insert a new customer alias into the database.
+
+        Args:
+            alias (CustomerAlias):
+                The alias to be inserted into the database.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("INSERT INTO customer_alias (alias, customer_id) VALUES (%s, %s)", (alias.alias, alias.customer_id))
+            cursor.execute(
+                "INSERT INTO customer_alias (alias, customer_id) VALUES (%s, %s)",
+                (alias.alias, alias.customer_id),
+            )
 
     def create_bulk(self, lines: list[CustomerAlias]) -> bool:
+        """Insert list of CustomerAliases into database.
+
+        Args:
+            lines (list[CustomerAlias]):
+                The list of aliases to be inserted into the database.
+
+        Returns:
+            bool:
+                True if the insert was successful, False if the list was empty.
+
+        """
         if not lines:
             return False
 
         values = [(ln.alias, ln.customer_id) for ln in lines]
 
         with self.connector.cursor() as cursor:
-            psycopg2.extras.execute_values(cursor,"INSERT INTO customer_alias (alias, customer_id) VALUES %s ON CONFLICT DO NOTHING", values, page_size=500)
+            psycopg2.extras.execute_values(
+                cursor,
+                "INSERT INTO customer_alias (alias, customer_id) "
+                "VALUES %s ON CONFLICT DO NOTHING",
+                values,
+                page_size=500,
+            )
             return True
 
 
     def delete(self, alias: str) -> None:
+        """Delete a customer alias from the database.
+
+        Args:
+            alias (str):
+                The alias to be deleted.
+
+        """
         with self.connector.cursor() as cursor:
             cursor.execute("DELETE FROM customer_alias WHERE alias = %s", (alias,))
 
 class LocationDAO(DAO):
+    """To be finished later."""
 
     _table = "locations"
     _pk = "location_id"
     _select = "SELECT location_id, city, state FROM locations"
 
-    def _from_row(self, row) -> Location:
+    def _from_row(self, row: tuple[Any, ...]) -> Location:
         return Location(location_id=row[0], city=row[1], state=row[2])
 
     def get_all_as_dict(self) -> dict[tuple[str, str], int]:
+        """Retrieve all locations in the database as a dictionary.
+
+        Returns:
+            dict[tuple[str, str], int]:
+                A dictionary with a tuple of (city, state)
+                as the key and location ID as the value.
+
+        """
         with self.connector.cursor() as cursor:
             cursor.execute(f"{self._select} ORDER BY {self._pk}")
             return {(x[1], x[2]): x[0] for x in cursor.fetchall()}
 
-    def get_page_as_dict(self, page_size: int = 100, page_number: Optional[int] = None,) -> dict[tuple[str, str], int]:
+    def get_page_as_dict(
+        self,
+        page_size: int = 100,
+        page_number: int | None = None,
+    ) -> dict[tuple[str, str], int]:
+        """Retrieve all locations of a page as a dictionary.
+
+        Args:
+            page_size (int, optional):
+                The max number of entries a page should have. Defaults to 100.
+            page_number (int | None, optional):
+                The page number to start from. Defaults to None.
+
+        Returns:
+            dict[tuple[str, str], int]:
+                A dictionary with a tuple of (city, state)
+                as the key and location ID as the value.
+
+        """
         with self.connector.cursor() as cursor:
             if page_number is None:
-                cursor.execute(f"{self._select} ORDER BY state, city LIMIT %s", (page_size,))
+                cursor.execute(
+                    f"{self._select} ORDER BY state, city LIMIT %s",
+                    (page_size,),
+                )
             else:
-                cursor.execute(f"{self._select} ORDER BY state, city OFFSET %s LIMIT %s",
-                               ((page_size * page_number), page_size))
-            return dict(map(lambda x: ((x[1], x[2]), x[0]), cursor.fetchall()))
+                cursor.execute(
+                    f"{self._select} ORDER BY state, city OFFSET %s LIMIT %s",
+                    ((page_size * page_number), page_size),
+                )
+            return {(x[1], x[2]): x[0] for x in cursor.fetchall()}
 
-    def get_by_id(self, location_id: int) -> Optional[Location]:
+    def get_by_id(self, location_id: int) -> Location | None:
+        """Retrieve a location based on its ID.
+
+        Args:
+            location_id (int):
+                The ID of the location to retrieve.
+
+        Returns:
+            Location | None:
+                The location associated with the ID or None if it
+                is not present in the database.
+
+        """
         with self.connector.cursor() as cursor:
             cursor.execute(f"{self._select} WHERE location_id = %s", (location_id,))
             row = cursor.fetchone()
         return Location(**row) if row else None
 
-    def get_by_name(self, city: str, state: str) -> Optional[Location]:
+    def get_by_name(self, city: str, state: str) -> Location | None:
+        """Retrieve a location based on its city and state.
+
+        Args:
+            city (str):
+                The city of the location to retrieve.
+            state (str):
+                The state of the location to retrieve.
+
+        Returns:
+            Location | None:
+                The location associated with the city and state or None if it
+                is not present in the database.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute(f"{self._select} WHERE city = %s AND state = %s", (city, state))
+            cursor.execute(
+                f"{self._select} WHERE city = %s AND state = %s",
+                (city, state),
+            )
             row = cursor.fetchone()
         return Location(**row) if row else None
 
     def create(self, location: Location) -> Location:
+        """Insert a location into the database.
+
+        Args:
+            location (Location):
+                The location to be inserted into the database.
+
+        Returns:
+            Location:
+                A new location object containing the ID
+                assigned to the inserted location.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("INSERT INTO locations (city, state) VALUES (%s, %s) ON CONFLICT DO NOTHING RETURNING location_id ", (location.city, location.state))
+            cursor.execute(
+                "INSERT INTO locations (city, state) VALUES (%s, %s) "
+                "ON CONFLICT DO NOTHING RETURNING location_id ",
+                (location.city, location.state),
+            )
             location.location_id = cursor.fetchone()[0]
         return location
 
     def update(self, location: Location) -> None:
+        """Update a location's city and state in the database.
+
+        Args:
+            location (Location):
+                The location information to be updated on the associated location ID.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("UPDATE locations SET city = %s, state = %s WHERE location_id = %s", (location.city, location.state, location.location_id))
+            cursor.execute(
+                "UPDATE locations SET city = %s, state = %s WHERE location_id = %s",
+                (location.city, location.state, location.location_id),
+            )
 
     def delete(self, location_id: int) -> None:
+        """Delete a location from the database.
+
+        Args:
+            location_id (int):
+                The ID of the location to delete.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("DELETE FROM locations WHERE location_id = %s", (location_id,))
+            cursor.execute(
+                "DELETE FROM locations WHERE location_id = %s",
+                (location_id,),
+            )
 
 class CustomerLocationDAO(DAO):
+    """To be finished later."""
 
     _table = "customer_locations"
     _pk = "customer_id"
     _select = "SELECT customer_id, location_id FROM customer_locations"
 
-    def _from_row(self, row) -> CustomerLocation:
+    def _from_row(self, row: tuple[Any, ...]) -> CustomerLocation:
         return CustomerLocation(**row)
 
-    def get(self, customer_id: int, location_id: int) -> Optional[CustomerLocation]:
+    def get(self, customer_id: int, location_id: int) -> CustomerLocation | None:
+        """Retrieve a customer location link based on the customer and location IDs.
+
+        Args:
+            customer_id (int):
+                The ID of the customer in the link.
+            location_id (int):
+                The ID of the location in the link.
+
+        Returns:
+            CustomerLocation | None:
+                The customer location link if it exists or None if not.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute(f"{self._select} WHERE customer_id = %s AND location_id = %s", (customer_id, location_id))
+            cursor.execute(
+                f"{self._select} WHERE customer_id = %s AND location_id = %s",
+                (customer_id, location_id),
+            )
             row = cursor.fetchone()
-            return CustomerLocation(customer_id = row[0], location_id = row[1]) if row else None
+            return CustomerLocation(
+                customer_id = row[0],
+                location_id = row[1],
+            ) if row else None
 
     def get_locations_for_customer(self, customer_id: int) -> list[CustomerLocation]:
+        """Retrieve a list of all customer locations associated with a customer ID.
+
+        Args:
+            customer_id (int):
+                The ID of the customer.
+
+        Returns:
+            list[CustomerLocation]:
+                A list of all customer locations associated with the customer ID.
+
+        """
         with self.connector.cursor() as cursor:
             cursor.execute(f"{self._select} WHERE customer_id = %s", (customer_id,))
             return [CustomerLocation(**row) for row in cursor.fetchall()]
 
     def get_customers_for_location(self, location_id: int) -> list[CustomerLocation]:
+        """Retrieve a list of all customers associated with a location ID.
+
+        Args:
+            location_id (int):
+                The ID of the location.
+
+        Returns:
+            list[CustomerLocation]:
+                A list of all customer locations associated with the location ID.
+
+        """
         with self.connector.cursor() as cursor:
             cursor.execute(f"{self._select} WHERE location_id = %s", (location_id,))
             return [CustomerLocation(**row) for row in cursor.fetchall()]
 
-    def create(self, link: CustomerLocation) -> CustomerLocation:
+    def create(self, link: CustomerLocation) -> None:
+        """Insert a customer location link into the database.
+
+        Args:
+            link (CustomerLocation):
+                The link to be inserted.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("INSERT INTO customer_locations (customer_id, location_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (link.customer_id, link.location_id))
-        return link
+            cursor.execute(
+                "INSERT INTO customer_locations (customer_id, location_id) "
+                "VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                (link.customer_id, link.location_id),
+                )
 
     def create_bulk(self, lines: list[CustomerLocation]) -> None:
+        """Insert a list of customer location links into the database.
+
+        Args:
+            lines (list[CustomerLocation]):
+                The list of customer locations to be inserted.
+
+        """
         if not lines:
             return lines
 
         values = [(ln.customer_id, ln.location_id) for ln in lines]
 
         with self.connector.cursor() as cursor:
-            psycopg2.extras.execute_values(cursor,"INSERT INTO customer_locations (customer_id, location_id) VALUES %s ON CONFLICT DO NOTHING", values, page_size=500)
+            psycopg2.extras.execute_values(
+                cursor,
+                "INSERT INTO customer_locations (customer_id, location_id) "
+                "VALUES %s ON CONFLICT DO NOTHING",
+                values,
+                page_size=500,
+            )
             return None
 
     def delete(self, customer_id: int, location_id: int) -> None:
+        """Delete a customer location link from the database.
+
+        Args:
+            customer_id (int):
+                The ID of the customer in the link.
+            location_id (int):
+                The ID of the location in the link.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("DELETE FROM customer_locations WHERE customer_id = %s and location_id = %s", (customer_id, location_id))
+            cursor.execute(
+                "DELETE FROM customer_locations "
+                "WHERE customer_id = %s AND location_id = %s",
+                (customer_id, location_id),
+            )
 
 class ManufacturerDAO(DAO):
+    """To be finished later."""
 
     _table = "manufacturers"
     _pk = "manufacturer_id"
     _select = "SELECT manufacturer_name, manufacturer_id FROM manufacturers"
 
-    def _from_row(self, row) -> Manufacturer:
+    def _from_row(self, row: tuple[Any, ...]) -> Manufacturer:
         return Manufacturer(row[1], row[0])
 
-    def get_by_id(self, manufacturer_id: int) -> Optional[Manufacturer]:
+    def get_by_id(self, manufacturer_id: int) -> Manufacturer | None:
+        """Retrieve a manufacturer based on its ID.
+
+        Args:
+            manufacturer_id (int):
+                The ID of the manufacturer to retrieve.
+
+        Returns:
+            Manufacturer | None:
+                The manufacturer associated with the ID
+                or None if it does not exist in the database.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute(f"{self._select} WHERE manufacturer_id = %s", (manufacturer_id,))
+            cursor.execute(
+                f"{self._select} WHERE manufacturer_id = %s",
+                (manufacturer_id,),
+            )
             row = cursor.fetchone()
         return self._from_row(row) if row else None
 
-    def get_by_name(self, manufacturer_name: str) -> Optional[Manufacturer]:
+    def get_by_name(self, manufacturer_name: str) -> Manufacturer | None:
+        """Retrieve a manufacturer based on its name.
+
+        Args:
+            manufacturer_name (str):
+                The name of the manufacturer to retrieve.
+
+        Returns:
+            Manufacturer | None:
+                The manufacturer associated with the name
+                or None if it does not exist in the database.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute(f"{self._select} WHERE manufacturer_name = %s", (manufacturer_name,))
+            cursor.execute(
+                f"{self._select} WHERE manufacturer_name = %s",
+                (manufacturer_name,),
+            )
             row = cursor.fetchone()
         return self._from_row(row) if row else None
 
     def create(self, manufacturer: Manufacturer) -> Manufacturer:
+        """Insert a manufacturer into the database.
+
+        Args:
+            manufacturer (Manufacturer):
+                The manufacturer to insert.
+
+        Returns:
+            Manufacturer:
+                A new manufacturer object containing the id
+                of the inserted manufacturer.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("INSERT INTO manufacturers (manufacturer_name) VALUES (%s) RETURNING manufacturer_id", (manufacturer.manufacturer_name,))
+            cursor.execute(
+                "INSERT INTO manufacturers (manufacturer_name) "
+                "VALUES (%s) RETURNING manufacturer_id",
+                (manufacturer.manufacturer_name,),
+            )
             manufacturer.manufacturer_id = cursor.fetchone()[0]
         return manufacturer
 
     def update(self, manufacturer: Manufacturer) -> None:
+        """Update a manufacturer in the database.
+
+        Args:
+            manufacturer (Manufacturer):
+                A manufacturer object containing the new name
+                and the ID of the manufacturer being updated.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("UPDATE manufacturers SET manufacturer_name = %s WHERE manufacturer_id = %s", (manufacturer.manufacturer_id,))
+            cursor.execute(
+                "UPDATE manufacturers SET manufacturer_name = %s "
+                "WHERE manufacturer_id = %s",
+                (manufacturer.manufacturer_id,),
+            )
 
     def delete(self, manufacturer_id: int) -> None:
+        """Delete a manufacturer from the database.
+
+        Args:
+            manufacturer_id (int):
+                The ID of the manufacturer to delete.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("DELETE FROM manufacturers WHERE manufacturer_id = %s", (manufacturer_id,))
+            cursor.execute(
+                "DELETE FROM manufacturers WHERE manufacturer_id = %s",
+                (manufacturer_id,),
+            )
 
 class ItemDAO(DAO):
+    """To be finished later."""
 
     _table = "items"
     _pk = "item_id"
     _select = "SELECT item_id, stockcode, product_family, product_description FROM item"
 
-    def _from_row(self, row) -> Item:
+    def _from_row(self, row: tuple[Any, ...]) -> Item:
         return Item(row[0], row[1], row[2], row[3])
 
     def get_all_as_dict(self, limit: int = 15_000) -> dict[str, int]:
+        """Retreive all items in the database as a dict.
+
+        Args:
+            limit (int):
+                The maximum number of entries to retrieve.
+
+        Returns:
+            dict[str, int]:
+                A dictionary containing the item stockcode as the key
+                and the item ID as the value.
+
+        """
         with self.connector.cursor() as cursor:
             cursor.execute(f"{self._select} ORDER BY {self._pk} LIMIT %s", (limit,))
-            return dict(map(lambda x: (x[1], x[0]), cursor.fetchall()))
+            return {x[1]: x[0] for x in cursor.fetchall()}
 
-    def get_page_as_dict(self, page_size: int = 100, page_number: Optional[int] = None,) -> dict[str, int]:
+    def get_page_as_dict(
+        self,
+        page_size: int = 100,
+        page_number: int | None = None,
+    ) -> dict[str, int]:
+        """Retrieve a page of items as a dict.
+
+        Args:
+            page_size (int):
+                The maximum number of entries each page should have. Defaults to 100.
+            page_number (int | None):
+                The number of the page to retrieve(should be based on page_size).
+                Defaults to None.
+
+        Returns:
+            dict[str, int]:
+                A dictionary containing the item stockcode as the key
+                and the item ID as the value.
+
+        """
         with self.connector.cursor() as cursor:
             if page_number is None:
-                cursor.execute(f"{self._select} ORDER BY {self._pk} LIMIT %s", (page_size,))
+                cursor.execute(
+                    f"{self._select} ORDER BY {self._pk} LIMIT %s",
+                    (page_size,),
+                )
             else:
-                cursor.execute(f"{self._select} ORDER BY {self._pk} OFFSET %s LIMIT %s",((page_size * page_number), page_size))
-            return dict(map(lambda x: (x[1], x[0]), cursor.fetchall()))
+                cursor.execute(
+                    f"{self._select} ORDER BY {self._pk} OFFSET %s LIMIT %s",
+                    ((page_size * page_number), page_size),
+                )
+            return {x[1]: x[0] for x in cursor.fetchall()}
 
-    def get_by_id(self, item_id: int) -> Optional[Item]:
+    def get_by_id(self, item_id: int) -> Item | None:
+        """Retrieve an item based on its ID.
+
+        Args:
+            item_id (int):
+                The ID of the item to retrieve.
+
+        Returns:
+            Item | None:
+                An Item object containing the item information associated with the ID
+                or None if the item does not exist in the database.
+
+        """
         with self.connector.cursor() as cursor:
             cursor.execute(f"{self._select} WHERE item_id = %s", (item_id,))
             row = cursor.fetchone()
         return Item(**row) if row else None
 
-    def get_by_stockcode(self, stockcode: str) -> Optional[Item]:
+    def get_by_stockcode(self, stockcode: str) -> Item | None:
+        """Retrieve an item based on its stockcode.
+
+        Args:
+            stockcode (str):
+                The stockcode of the item to retrieve.
+
+        Returns:
+            Item | None:
+                An Item object containing the item information associated
+                with the stockcode or None if the item does not exist in the database.
+
+        """
         with self.connector.cursor() as cursor:
             cursor.execute(f"{self._select} WHERE stockcode = %s", (stockcode,))
             row = cursor.fetchone()
         return Item(**row) if row else None
 
     def get_by_family(self, product_family: str) -> list[Item]:
+        """Retrieve all items within a specific product family.
+
+        Args:
+            product_family (str):
+                The product family of the items to retrieve.
+
+        Returns:
+            list[Item]:
+                A list containing all items associated with
+                the specified product family.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute(f"{self._select} WHERE product_family = %s ORDER BY stockcode", (product_family,))
+            cursor.execute(
+                f"{self._select} WHERE product_family = %s ORDER BY stockcode",
+                (product_family,),
+            )
         return [Item(**row) for row in cursor.fetchall()]
 
     def create(self, item: Item) -> Item:
+        """Insert an item into the database.
+
+        Args:
+            item (Item):
+                The item to be inserted.
+
+        Returns:
+            Item:
+                An item object containing the ID of the inserted item.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("INSERT INTO item (stockcode, product_family, product_description) VALUES (%s, %s, %s) RETURNING item_id", (item.stockcode, item.product_family, item.product_description))
+            cursor.execute(
+                "INSERT INTO item (stockcode, product_family, product_description) "
+                "VALUES (%s, %s, %s) RETURNING item_id",
+                (item.stockcode, item.product_family, item.product_description),
+            )
             item.item_id = cursor.fetchone()[0]
         return item
 
     def update(self, item: Item) -> None:
+        """Update an item in the database.
+
+        Args:
+            item (Item):
+                An Item object containing the ID of the item to update
+                and the updated information.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("UPDATE item SET stockcode = %s, product_family = %s, product_description = %s WHERE item_id = %s", (item.stockcode, item.product_family, item.product_description, item.item_id))
+            cursor.execute(
+                "UPDATE item "
+                "SET stockcode = %s, product_family = %s, product_description = %s "
+                "WHERE item_id = %s",
+                (
+                    item.stockcode,
+                    item.product_family,
+                    item.product_description,
+                    item.item_id,
+                ),
+            )
 
     def delete(self, item_id: int) -> None:
+        """Delete an item from the database.
+
+        Args:
+            item_id (int):
+                The ID of the item to delete.
+
+        """
         with self.connector.cursor() as cursor:
             cursor.execute("DELETE FROM item WHERE item_id = %s", (item_id,))
 
 class SalesReportDAO(DAO):
+    """To be finished later."""
 
     _table = "sales_report"
     _pk = "sales_report_id"
