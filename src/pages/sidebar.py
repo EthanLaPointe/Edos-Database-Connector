@@ -1,5 +1,4 @@
-"""Contains class and methods for creation and use of app sidebar."""  # noqa: N999
-
+"""Contains class and methods for creation and use of app sidebar."""
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QLabel, QPushButton, QVBoxLayout
 

@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Optional, TypeVar
+from typing import Any, TypeVar
 
 import psycopg2
 import psycopg2.extras
@@ -1087,143 +1087,502 @@ class SalesReportDAO(DAO):
 
     _table = "sales_report"
     _pk = "sales_report_id"
-    _select = "SELECT report_id, manufacturer_id, report_year, report_month FROM sales_report"
+    _select = (
+        "SELECT report_id, manufacturer_id, report_year, report_month FROM sales_report"
+    )
 
-    def _from_row(self, row) -> SalesReport:
+    def _from_row(self, row: tuple[Any, ...]) -> SalesReport:
         return SalesReport(**row)
 
-    def get_by_id(self, report_id: int) -> Optional[SalesReport]:
+    def get_by_id(self, report_id: int) -> SalesReport | None:
+        """Retrieve a sales report by its ID.
+
+        Args:
+            report_id (int):
+                The ID of the report to retrieve.
+
+        Returns:
+            SalesReport | None:
+                The sales report associated with the ID if it exists
+                or None if it does not.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("SELECT FROM sales_report WHERE report_id = %s", (report_id,))
+            cursor.execute(
+                "SELECT FROM sales_report WHERE report_id = %s",
+                (report_id,),
+            )
             row = cursor.fetchone()
         return SalesReport(**row) if row else None
 
-    def check_exists(self, manufacturer_id: int, year: str, month: str) -> bool:
+    def check_exists(self, report: SalesReport) -> bool:
+        """Check if a specific report is already present in the database.
+
+        Args:
+            report (SalesReport):
+                The report to check. Must contain the manufacturer ID,
+                report year, and report month.
+
+        Returns:
+            bool:
+                True if the report exists within the database
+                or false if it does not.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("SELECT 1 FROM sales_report WHERE manufacturer_id = %s AND report_year = %s AND report_month = %s LIMIT 1", (manufacturer_id, year, month))
+            cursor.execute(
+                "SELECT 1 FROM sales_report "
+                "WHERE manufacturer_id = %s AND report_year = %s AND report_month = %s "
+                "LIMIT 1",
+                (report.manufacturer_id, report.report_year, report.report_month),
+            )
             result = cursor.fetchone()
-        return True if result else False
+        return bool(result)
 
     def get_by_manufacturer(self, manufacturer_id: int) -> list[SalesReport]:
+        """Retrieve all sales reports of a specific manufacturer.
+
+        Args:
+            manufacturer_id (int):
+                The ID of the manufacturer.
+
+        Returns:
+            list[SalesReport]:
+                A list containing all sales reports associated
+                with that manufacturer.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("SELECT FROM sales_report WHERE manufacturer_id = %s", (manufacturer_id,))
+            cursor.execute(
+                "SELECT FROM sales_report WHERE manufacturer_id = %s",
+                (manufacturer_id,),
+            )
             return [SalesReport(**row) for row in cursor.fetchall()]
 
     def get_by_period(self, year: str, month: str) -> list[SalesReport]:
+        """Retrieve all sales reports within a specific period.
+
+        Args:
+            year (str):
+                The year of the reports.
+            month (str):
+                The month of the reports.
+
+        Returns:
+            list[SalesReport]:
+                A list of all sales reports within the specified period.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("SELECT FROM sales_report WHERE year = %s AND month = %s", (year, month))
+            cursor.execute(
+                "SELECT FROM sales_report WHERE year = %s AND month = %s",
+                (year, month),
+            )
             return [SalesReport(**row) for row in cursor.fetchall()]
 
     def create(self, report: SalesReport) -> SalesReport:
+        """Insert a new sales report into the database.
+
+        Args:
+            report (SalesReport):
+                The sales report to insert.
+
+        Returns:
+            SalesReport:
+                A SalesReport object containing the ID of the new report.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("INSERT INTO sales_report (manufacturer_id, report_year, report_month) VALUES (%s, %s, %s) RETURNING report_id", (report.manufacturer_id, report.report_year, report.report_month))
+            cursor.execute(
+                "INSERT INTO sales_report (manufacturer_id, report_year, report_month) "
+                "VALUES (%s, %s, %s) RETURNING report_id",
+                (report.manufacturer_id, report.report_year, report.report_month),
+            )
             report.report_id = cursor.fetchone()[0]
         return report
 
     def delete(self, report_id: int) -> None:
+        """Delete a sales report from the database.
+
+        Args:
+            report_id (int):
+                The ID of the report to delete.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("DELETE FROM sales_report WHERE report_id = %s", (report_id,))
+            cursor.execute(
+                "DELETE FROM sales_report WHERE report_id = %s",
+                (report_id,),
+            )
 
 class SaleCustomerDAO(DAO):
+    """To be finished later."""
 
     _table = "sale_customer"
     _pk = "report_id"
     _select = "SELECT report_id, customer_id, location_id FROM sale_customer"
 
-    def _from_row(self, row) -> SaleCustomer:
+    def _from_row(self, row: tuple[Any, ...]) -> SaleCustomer:
         return SaleCustomer(**row)
 
-    def get(self, report_id: int, customer_id: int, location_id: int) -> Optional[SaleCustomer]:
+    def get(
+        self,
+        report_id: int,
+        customer_id: int,
+        location_id: int,
+    ) -> SaleCustomer | None:
+        """Retrieve a SaleCustomer from the database.
+
+        Args:
+            report_id (int):
+                The ID of the report the customer is from.
+            customer_id (int):
+                The ID of the customer.
+            location_id (int):
+                The ID of the location of the customer.
+
+        Returns;
+            SaleCustomer | None:
+                A SaleCustomer object if an associated sales customer exists
+                or None if it does not.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute(f"{self._select} WHERE report_id = %s AND customer_id = %s AND location_id = %s", (report_id, customer_id, location_id))
+            cursor.execute(
+                f"{self._select} WHERE report_id = %s AND customer_id = %s "
+                "AND location_id = %s",
+                (report_id, customer_id, location_id),
+            )
             row = cursor.fetchone()
-            return SaleCustomer(report_id= row[0], customer_id= row[1], location_id= row[2]) if row else None
+            return SaleCustomer(report_id=row[0],
+                                customer_id=row[1],
+                                location_id=row[2],
+                            ) if row else None
 
     def get_by_report(self, report_id: int) -> list[SaleCustomer]:
+        """Retrieve all SaleCustomers of a report.
+
+        Args:
+            report_id (int):
+                The ID of the report to pull customers from.
+
+        Returns:
+            list[SaleCustomer]:
+                A list of all SaleCustomers within the specified report.
+
+        """
         with self.connector.cursor() as cursor:
             cursor.execute(f"{self._select} WHERE report_id = %s", (report_id,))
         return [SaleCustomer(**row) for row in cursor.fetchall()]
 
     def create(self, link: SaleCustomer) -> None:
+        """Insert a new SaleCustomer into the database.
+
+        Args:
+            link (SaleCustomer):
+                The SaleCustomer link to be inserted.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("INSERT INTO sale_customer (report_id, customer_id, location_id) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING", (link.report_id, link.customer_id, link.location_id))
+            cursor.execute(
+                "INSERT INTO sale_customer (report_id, customer_id, location_id) "
+                "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
+                (link.report_id, link.customer_id, link.location_id),
+            )
 
     def delete(self, report_id: int, customer_id: int, location_id: int) -> None:
+        """Delete a SaleCustomer link from the database.
+
+        Args:
+            report_id (int):
+                The ID of the report the sale customer is from.
+            customer_id (int):
+                The ID of the customer.
+            location_id (int):
+                The ID of the location of the customer.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("DELETE FROM sale_customer WHERE report_id = %s AND customer_id = %s AND location_id = %s", (report_id, customer_id, location_id))
+            cursor.execute(
+                "DELETE FROM sale_customer "
+                "WHERE report_id = %s AND customer_id = %s AND location_id = %s",
+                (report_id, customer_id, location_id),
+            )
 
     def create_bulk(self, lines: list[SaleCustomer]) -> None:
+        """Insert a list of SaleCustomers into the database.
+
+        Args:
+            lines (list[SaleCustomer]):
+                The list of SaleCustomers to be inserted.
+
+        """
         if not lines:
             return lines
 
         values = [(ln.report_id, ln.customer_id, ln.location_id) for ln in lines]
 
         with self.connector.cursor() as cursor:
-            psycopg2.extras.execute_values(cursor,"INSERT INTO sale_customer (report_id, customer_id, location_id) VALUES %s ON CONFLICT DO NOTHING", values, page_size=500)
+            psycopg2.extras.execute_values(
+                cursor,
+                "INSERT INTO sale_customer (report_id, customer_id, location_id) "
+                "VALUES %s ON CONFLICT DO NOTHING",
+                values,
+                page_size=500,
+            )
             return None
 
 class ReportLineDAO(DAO):
+    """To be finished later."""
 
     _table = "report_line"
     _pk = "report_line_id"
-    _select = "SELECT report_line_id, report_id, customer_alias, customer_id, item_id, quantity, amt, transfer, location_id, sale_date FROM report_line"
+    _select = ("SELECT report_line_id, "
+               "report_id, "
+               "customer_alias, "
+               "customer_id, item_id, "
+               "quantity, "
+               "amt, "
+               "transfer, "
+               "location_id, "
+               "sale_date "
+               "FROM report_line"
+            )
 
-    def _from_row(self, row) -> ReportLine:
-        return ReportLine(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9])
+    def _from_row(self, row: tuple[Any, ...]) -> ReportLine:
+        return ReportLine(
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+            row[6],
+            row[7],
+            row[8],
+            row[9],
+        )
 
-    def get_by_id(self, report_line_id: int) -> Optional[ReportLine]:
+    def get_by_id(self, report_line_id: int) -> ReportLine | None:
+        """Retrieve a ReportLine based on its ID.
+
+        Args:
+            report_line_id (int):
+                The ID of the ReportLine to retrieve.
+
+        Returns:
+            ReportLine | None:
+                The ReportLine associated with the ID if it exists
+                or None if it does not.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute(f"{self._select} WHERE report_line_id = %s", (report_line_id,))
+            cursor.execute(
+                f"{self._select} WHERE report_line_id = %s",
+                (report_line_id,),
+            )
             row = cursor.fetchone()
             return ReportLine(**row) if row else None
 
-    def get_by_report(self, report_id: int) -> list[tuple[Any, ]]:
-        with self.connector.cursor() as cursor:
-             cursor.execute(f"{self._select} WHERE report_id = %s ORDER BY report_line_id", (report_id,))
-             return cursor.fetchall()
+    def get_by_report(self, report_id: int) -> list[ReportLine]:
+        """Retrieve a list of all ReportLines within a report.
 
-    def stream_by_report(self, report_id: int, chunk_size: int = 500) -> Iterator[ReportLine]:
+        Args:
+            report_id (int):
+                The ID of the report to retreive the lines from.
+
+        Returns:
+            list[ReportLine]:
+                A list containing all ReportLines of the specified report.
+
+        """
+        with self.connector.cursor() as cursor:
+             cursor.execute(
+                 f"{self._select} WHERE report_id = %s ORDER BY report_line_id",
+                 (report_id,),
+                )
+             return [self._from_row(x) for x in cursor.fetchall()]
+
+    def stream_by_report(
+        self, report_id: int,
+        chunk_size: int = 500,
+    ) -> Iterator[ReportLine]:
+        """To be documented later."""
         # Named cursors must NOT go through the commit/rollback wrapper —
         # they need their own connection transaction scope.
         conn = self.connector.conn
-        with conn.cursor(name="report_line_stream", cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        with conn.cursor(
+            name="report_line_stream",
+            cursor_factory=psycopg2.extras.RealDictCursor,
+        ) as cur:
             cur.itersize = chunk_size
-            cur.execute(f"{self._select} WHERE report_id = %s ORDER BY report_line_id", (report_id,))
+            cur.execute(
+                f"{self._select} WHERE report_id = %s ORDER BY report_line_id",
+                (report_id,),
+            )
             for row in cur:  # psycopg2 fetches `itersize` rows per round-trip
                 yield ReportLine(**row)
 
     def get_by_customer(self, customer_id: int) -> list[ReportLine]:
+        """Retrieve all ReportLines containing a specific customer.
+
+        Args:
+            customer_id (int):
+                The ID of the customer to search for.
+
+        Returns:
+            list[ReportLine]:
+                A list of ReportLine containing all lines with the
+                specified customer.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute(f"{self._select} WHERE customer_id = %s ORDER BY report_line_id", (customer_id,))
+            cursor.execute(
+                f"{self._select} WHERE customer_id = %s ORDER BY report_line_id",
+                (customer_id,),
+            )
             return [ReportLine(**row) for row in cursor.fetchall()]
 
-    def get_by_date_range(self):
-        print()
+    def get_by_date_range(self) -> list[ReportLine]:
+        """To be implemented later."""
 
     def create(self, line: ReportLine) -> None:
-        with self.connector.cursor() as cursor:
-            #"reportLineInsert": """insert into report_line(report_id, customer_id, item_id, location_id, amt, sale_date, quantity, transfer) values (%s, %s, %s, %s, %s, %s, %s, %s);"""
-            cursor.execute("INSERT INTO report_line  (report_id, customer_id, item_id, quantity, amt, transfer, location_id, sale_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                (line.report_id, line.customer_id, line.item_id, line.quantity, line.amt, line.transfer, line.location_id, line.sale_date,))
+        """Insert a ReportLine into the database.
 
-    def direct_insert(self, report_id, customer_id, item_id, location_id, amount, saledate, quantity, transfer):
+        Args:
+            line (ReportLine):
+                The ReportLine to be inserted.
+
+        """
         with self.connector.cursor() as cursor:
-            cursor.execute("insert into report_line(report_id, customer_id, item_id, location_id, amt, sale_date, quantity, transfer) values (%s, %s, %s, %s, %s, %s, %s, %s);",
-                           (report_id, customer_id, item_id, location_id, amount, saledate, quantity, transfer))
+            cursor.execute("INSERT INTO report_line "
+                           "(report_id, "
+                           "customer_id, "
+                           "item_id, "
+                           "quantity, "
+                           "amt, "
+                           "transfer, "
+                           "location_id, "
+                           "sale_date) "
+                           "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                        (
+                            line.report_id,
+                            line.customer_id,
+                            line.item_id,
+                            line.quantity,
+                            line.amt,
+                            line.transfer,
+                            line.location_id,
+                            line.sale_date,
+                        ),
+            )
+
+    def direct_insert(  # noqa: PLR0913
+        self,
+        report_id: int,
+        customer_id: int,
+        item_id: int,
+        location_id: int,
+        amount: float,
+        saledate: str,
+        quantity: int,
+        transfer: str,
+    ) -> None:
+        """Insert a single report line using raw data.
+
+        Args:
+            report_id (int):
+                ID of the parent report.
+            customer_id (int):
+                ID of the customer in the line.
+            item_id (int):
+                ID of the item in the line.
+            location_id (int):
+                ID of the location in the line.
+            amount (float):
+                The amount value of the line.
+            saledate (str):
+                The sale date of the line.
+            quantity (int):
+                The item quantity of the line.
+            transfer (str):
+                The transfer type of the line.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(
+                "insert into report_line "
+                "(report_id, "
+                "customer_id, "
+                "item_id, "
+                "location_id, "
+                "amt, "
+                "sale_date, "
+                "quantity, "
+                "transfer) "
+                "values (%s, %s, %s, %s, %s, %s, %s, %s);",
+                (
+                    report_id,
+                    customer_id,
+                    item_id,
+                    location_id,
+                    amount,
+                    saledate,
+                    quantity,
+                    transfer,
+                ),
+            )
 
     def create_bulk(self, lines: list[ReportLine]) -> None:
+        """Insert a list of ReportLine.
+
+        Args:
+            lines (list[ReportLine]):
+                The list of ReportLines to insert.
+
+        """
         if not lines:
             return lines
 
-        values = [(ln.report_id, ln.customer_alias, ln.customer_id, ln.item_id, ln.quantity, ln.amt, ln.transfer, ln.location_id, ln.sale_date,) for ln in lines]
+        values = [
+            (
+                ln.report_id,
+                ln.customer_alias,
+                ln.customer_id,
+                ln.item_id,
+                ln.quantity,
+                ln.amt,
+                ln.transfer,
+                ln.location_id,
+                ln.sale_date,
+            )
+            for ln in lines
+        ]
 
         with self.connector.cursor() as cursor:
-            psycopg2.extras.execute_values(cursor,"INSERT INTO report_line (report_id, customer_alias, customer_id, item_id, quantity, amt, transfer, location_id, sale_date) VALUES %s", values, page_size=500)
+            psycopg2.extras.execute_values(
+                cursor,
+                "INSERT INTO report_line "
+                "(report_id, "
+                "customer_alias, "
+                "customer_id, "
+                "item_id, "
+                "quantity, "
+                "amt, "
+                "transfer, "
+                "location_id, "
+                "sale_date) "
+                "VALUES %s",
+                values,
+                page_size=500,
+            )
             return None
 
 class DAOFactory:
+    """To be finished later."""
 
-    def __init__(self, db: DBConnector):
+    def __init__(self, db: DBConnector) -> None:
+        """Initialize a DAOFactory object and its internal DAO Classes."""
         self.db = db
         self.customers = CustomerDAO(db)
         self.customer_aliases = CustomerAliasDAO(db)
@@ -1235,5 +1594,6 @@ class DAOFactory:
         self.sale_customers = SaleCustomerDAO(db)
         self.report_lines = ReportLineDAO(db)
 
-    def close(self):
+    def close(self) -> None:
+        """Close the database connection of the factory."""
         self.db.close()
