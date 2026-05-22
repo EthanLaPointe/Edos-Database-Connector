@@ -44,6 +44,16 @@ MAPPING_FIELD_LIST = ["alias", "parent"]
 # Status codes for individual mappings
 MAPPING_CODES = {"valid": 0, "duplicate alias": 1, "unknown customer": 2}
 
+CITY_TRANSLATIONS = {
+    "n": "north",
+    "s": "south",
+    "so": "south",
+    "e": "east",
+    "w": "west",
+    "st": "saint",
+    "ft": "fort",
+}
+
 class FileHandler:
     """To be finished later."""
 
@@ -241,8 +251,13 @@ class FileHandler:
             regex=True,
         ).str.strip().astype(float).astype(int)
         dataframe["saledate"] = dataframe["saledate"].fillna(None)
-        #Strip whitespace from city, state
-        dataframe["city"] = dataframe["city"].astype(str).str.strip()
+        #Remove special characters from city, replace abbreviations and strip whitespace
+        dataframe["city"] = dataframe["city"].astype(str).str.replace(
+            r"[.]",
+            "",
+            regex=True,
+        ).strip()
+        # Strip whitespace from state
         dataframe["state"] = dataframe["state"].astype(str).str.strip()
         #Remove any $ from amount column
         dataframe["amount"] = dataframe["amount"].astype(str).str.replace(
