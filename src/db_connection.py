@@ -405,7 +405,7 @@ class CustomerDAO(DAO):
         with self.connector.cursor() as cursor:
             cursor.execute(
                 "INSERT INTO customers (customer_name) VALUES (%s) "
-                "RETURNING customer_id ON CONFLICT DO NOTHING",
+                "ON CONFLICT DO NOTHING RETURNING customer_id",
                 (customer.customer_name,),
             )
             customer.customer_id = cursor.fetchone()[0]

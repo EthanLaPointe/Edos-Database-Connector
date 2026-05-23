@@ -347,7 +347,7 @@ class ReportFlagDialog(QDialog):
                     )
 
             except Exception as e:  # noqa: BLE001
-                self._show_status(f"Failed to insert new customer: {e}", error=True)
+                self._show_status(f"Failed to insert new customer: {traceback.format_exc()}", error=True)
 
     def _resolve_aliases(self) -> None:
         valid_names = set(self.cache.customer_aliases.keys())

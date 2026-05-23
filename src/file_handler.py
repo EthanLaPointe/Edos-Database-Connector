@@ -5,6 +5,7 @@ Also used for the reading, cleaning, validation, and insertion, of alias mapping
 """
 
 import csv
+import re
 from decimal import Decimal
 from pathlib import Path
 
@@ -220,6 +221,25 @@ class FileHandler:
         #Trim DF to only contain desired columns
         return dataframe.iloc[:, fields_to_keep]
 
+    def _expand_city_abbreviations(self, series: pd.Series) -> pd.Series:
+        if not CITY_TRANSLATIONS:
+            return series
+
+        # Build regex pattern
+        pattern = re.compile(
+            r"\b(" + "|".join(re.escape(k) for k in CITY_TRANSLATIONS) + r")\b",
+        )
+
+        # Process unique cities only, link abbreviated city to its translation
+        unique_cities = series.unique()
+        lookup: dict[str, str] = {
+            val: pattern.sub(lambda m: CITY_TRANSLATIONS[m.group(0)], val)
+            for val in unique_cities
+            if isinstance(val, str)
+        }
+
+        return series.map(lookup)
+
     def fill_empty(self, dataframe: pd.DataFrame) -> pd.DataFrame:
         """Fill empty rows and add any missing dataframe columns."""
         #Loop through desired fields
@@ -241,53 +261,64 @@ class FileHandler:
                     column=field,
                     value=np.nan,
                 )
-        #Update column names to match field list
+        # Update column names to match field list
         dataframe.columns = REPORT_FIELD_LIST
-        dataframe = dataframe.map(lambda s: s.lower() if isinstance(s, str) else s)
-        #Change instances of nan to proper datatypes in each col
-        dataframe["quantity"] = dataframe["quantity"].fillna(0).astype(str).str.replace(
-            r"[$,)#]",
-            "",
-            regex=True,
-        ).str.strip().astype(float).astype(int)
+        # Lowercase only string columns (avoid applymap to be robust)
+        dataframe = dataframe.apply(
+            lambda col: col.str.lower()
+            if pd.api.types.is_string_dtype(col) else col,
+        )
+        # Change instances of nan to proper datatypes in each col
+        dataframe["quantity"] = (
+            dataframe["quantity"]
+            .fillna(0)
+            .astype(str)
+            .str.replace(r"[$,)#]", "", regex=True)
+            .str.strip()
+            .astype(float)
+            .astype(int)
+        )
         dataframe["saledate"] = dataframe["saledate"].fillna(None)
-        #Remove special characters from city, replace abbreviations and strip whitespace
-        dataframe["city"] = dataframe["city"].astype(str).str.replace(
-            r"[.]",
-            "",
-            regex=True,
-        ).strip()
+        # Remove special characters and strip whitespace from cities
+        dataframe["city"] = (
+            dataframe["city"]
+            .astype(str)
+            .str.replace(r"[.]", "", regex=True)
+            .str.strip()
+        )
+        # Expand all abbreviations in city column
+        dataframe["city"] = self._expand_city_abbreviations(dataframe["city"])
         # Strip whitespace from state
         dataframe["state"] = dataframe["state"].astype(str).str.strip()
-        #Remove any $ from amount column
-        dataframe["amount"] = dataframe["amount"].astype(str).str.replace(
-            r"[$,)#]",
-            "",
-            regex=True,
-        ).str.strip().replace(
-            "",
-            "0.0",
-        ).replace(
-            r"[-(]",
-            "-0",
-            regex=True,
-        ).fillna(0.0).astype(float)
+        # Remove any $ from amount column
+        dataframe["amount"] = (
+            dataframe["amount"]
+            .astype(str)
+            .str.replace(r"[$,)#]", "", regex=True)
+            .str.strip()
+            # Replace empty-string values (elementwise), not substrings
+            .replace("", "0.0", regex=False)
+            .str.replace(r"[-(]", "-0", regex=True)
+            .fillna(0.0)
+            .astype(float)
+        )
         #Remove special characters from customer name
-        dataframe["customername"] = dataframe["customername"].astype(str).str.replace(
-            r"[.'(),-]",
-            "",
-            regex=True,
-        ).str.replace(r" +", " ", regex=True).str.strip()
+        dataframe["customername"] = (
+            dataframe["customername"]
+            .astype(str)
+            .str.replace(r"[.'(),-]", "", regex=True)
+            .str.replace(r" +", " ", regex=True)
+            .str.strip()
+        )
         #Fill any leftover empty cells with None
         dataframe = dataframe.replace({np.nan: None})
         #Remove any row where amount is 0
         #And set quantity to null if it = 0 where amount is > 0
         dataframe = dataframe[dataframe["amount"] != 0.0]
-        dataframe["quantity"] = (
-            np.where((dataframe["amount"] > 0)
-            & (dataframe["quantity"] == 0),
+        dataframe["quantity"] = np.where(
+            (dataframe["amount"] > 0) & (dataframe["quantity"] == 0),
             None,
-            dataframe["quantity"]),
+            dataframe["quantity"],
         )
 
         return dataframe
@@ -340,8 +371,12 @@ class FileHandler:
         if manufacturer_id is not None:
             valid_manufacturer = True
             already_present = self.dao.sales_reports.check_exists(
-                manufacturer_id,
-                report.year,report.month,
+                SalesReport(
+                    report_id=None,
+                    manufacturer_id=manufacturer_id,
+                    report_year=report.year,
+                    report_month=report.month,
+                ),
             )
 
         # Add each unique unknown name to the unknown_list
@@ -406,7 +441,10 @@ class FileHandler:
             dataframe.insert(loc=len(dataframe.columns), column="status", value=np.nan)
 
             # Filter names in alias and parent columns to match report filtering
-            dataframe = dataframe.map(lambda s: s.lower() if isinstance(s, str) else s)
+            dataframe = dataframe.apply(
+                lambda col: col.str.lower()
+                if pd.api.types.is_string_dtype(col) else col,
+            )
             dataframe["parent"] = dataframe["parent"].astype(str).str.replace(
                 r"[.'(),-]",
                 "",
