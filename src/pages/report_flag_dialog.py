@@ -199,6 +199,14 @@ class ReportFlagDialog(QDialog):
         elif code == already_exists:
             self._build_overwrite_panel(layout)
 
+    def _clear_layout(self, layout: QVBoxLayout) -> None:
+        while layout.count():
+            item = layout.takeAt(0)
+            if widget := item.widget():
+                widget.deleteLater()
+            elif sub_layout := item.layout():
+                self._clear_layout(sub_layout)
+
     def _rebuild_panel_for_code(self, new_code: int) -> None:
         self.code = new_code
 
@@ -212,11 +220,7 @@ class ReportFlagDialog(QDialog):
         self._desc_lbl.setText(description)
 
         # Clear all widgets from the panel layout
-        panel_layout = self._resolution_panel.layout()
-        while panel_layout.count():
-            item = panel_layout.takeAt(0)
-            if widget := item.widget():
-                widget.deleteLater()
+        self._clear_layout(self._resolution_panel.layout())
 
         # Reset per-panel state
         self._mfr_input = None
@@ -224,7 +228,7 @@ class ReportFlagDialog(QDialog):
         self._alias_inputs = {}
 
         # Rebuild for new code
-        self._populate_panel(new_code, panel_layout)
+        self._populate_panel(new_code, self._resolution_panel.layout())
         self._resolution_panel.setEnabled(True)
         self._status_lbl.hide()
 
