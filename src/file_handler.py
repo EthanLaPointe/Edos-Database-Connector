@@ -296,7 +296,7 @@ class FileHandler:
             .astype(str)
             .str.replace(r"[$,)#]", "", regex=True)
             .str.strip()
-            # Replace empty-string values (elementwise), not substrings
+            # Replace empty-string values
             .replace("", "0.0", regex=False)
             .str.replace(r"[-(]", "-0", regex=True)
             .fillna(0.0)

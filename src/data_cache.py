@@ -13,9 +13,10 @@ class DataCache:
                 DAOFactory to be used for retrieval of DB data.
 
         """
-        self._factory = factory
+        self._factory: DAOFactory = factory
         self.locations: dict = {}
         self.customer_aliases: dict = {}
+        self.customers: dict = {}
         self.items: dict = {}
         self.manufacturers: dict = {}
         self.refresh()

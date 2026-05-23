@@ -579,7 +579,7 @@ class AliasPage(QWidget):
         reply = QMessageBox.question(
             self,
             "Insert Unknown Customers",
-            f"{len(unknown)} customer(s) were not found in the database"
+            f"{len(unknown)} customer(s) were not found in the database "
             f"and will be created.\n\nProceed?",
             QMessageBox.Yes | QMessageBox.No,
         )

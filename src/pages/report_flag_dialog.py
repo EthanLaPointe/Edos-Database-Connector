@@ -264,8 +264,8 @@ class ReportFlagDialog(QDialog):
         scroll.setMinimumHeight(min(180, max(60, len(unknown_aliases) * 46)))
 
         inner = QWidget()
-        inner_layout = QFormLayout(inner)
-        inner_layout.setSpacing(8)
+        self._inner_layout = QFormLayout(inner)
+        self._inner_layout.setSpacing(8)
 
         self._alias_inputs: dict[str, QLineEdit] = {}
         for alias in unknown_aliases:
@@ -275,9 +275,9 @@ class ReportFlagDialog(QDialog):
             field.setCompleter(self._make_completer())
             row.addWidget(field, stretch=10)
             add_cust_btn = QPushButton("Add as new customer")
-            add_cust_btn.clicked.connect(partial(self._add_as_new_customer, alias))
+            add_cust_btn.clicked.connect(partial(self._add_as_new_customer, alias, row))
             row.addWidget(add_cust_btn)
-            inner_layout.addRow(f"{alias}:", row)
+            self._inner_layout.addRow(f"{alias}:", row)
             self._alias_inputs[alias] = field
 
         scroll.setWidget(inner)
@@ -323,6 +323,7 @@ class ReportFlagDialog(QDialog):
             customer = self._factory.customers.create(
                 Customer(customer_id=None, customer_name=cust_name),
             )
+            self.cache.customers[customer.customer_name] = customer.customer_id
             self.cache.customer_aliases[customer.customer_name] = customer.customer_id
             self._refresh_name_completers()
             self._show_status(
@@ -332,62 +333,74 @@ class ReportFlagDialog(QDialog):
         except Exception as e:  # noqa: BLE001
             self._show_status(f"Failed to insert new customer: {e}", error=True)
 
-    def _add_as_new_customer(self, alias: str) -> None:
+    def _add_as_new_customer(self, alias: str, row: QWidget) -> None:
         if alias in self._alias_inputs:
             try:
                 customer = self._factory.customers.create(
                     Customer(customer_id=None, customer_name=alias),
                 )
-                key = customer.customer_name
-                self.cache.customer_aliases[key] = customer.customer_id
+                alias_key = customer.customer_name
+                self.cache.customers[customer.customer_name] = customer.customer_id
+                self.cache.customer_aliases[alias_key] = customer.customer_id
                 self._refresh_name_completers()
                 self._show_status(
                     f"{customer.customer_name} successfully added as new customer",
                     error=False,
                     )
+                self._inner_layout.removeRow(row)
+                self._alias_inputs.pop(alias)
 
-            except Exception as e:  # noqa: BLE001
-                self._show_status(f"Failed to insert new customer: {traceback.format_exc()}", error=True)
+            except Exception:  # noqa: BLE001
+                self._show_status(
+                    f"Failed to insert new customer: {traceback.format_exc()}",
+                    error=True,
+                )
 
     def _resolve_aliases(self) -> None:
-        valid_names = set(self.cache.customer_aliases.keys())
-        mappings = {
-            alias: field.text().strip()
-            for alias, field in self._alias_inputs.items()
-        }
-
-        unmapped = [a for a, v in mappings.items() if not v]
-        if unmapped:
-            self._show_status(
-                "Please map all aliases before retrying. "
-                f"Missing. {', '.join(unmapped)}",
-                error=True,
-            )
-            return
-        invalid = [a for a, v in mappings.items() if v and v not in valid_names]
-        if invalid:
-            self._show_status(
-                f"Unrecognized customer name(s) for : {', '.join(invalid)}. "
-                "Use the autocomplete suggestions or add customer first.",
-                error=True,
-            )
-            return
-
-        try:
-            alias_list: list[CustomerAlias] = []
-            for alias, customer in mappings.items():
-                customer_id = self.cache.customers[customer]
-                if customer_id:
-                    alias_list.append(
-                        CustomerAlias(alias=alias, customer_id=customer_id),
-                    )
-
-            success = self._factory.customer_aliases.create_bulk(alias_list)
-            if(success):
-                self.cache.refresh()
+        if len(self._alias_inputs) == 0:
+            try:
                 self._retry_insert()
-        except Exception as e:  # noqa: BLE001
-            self._show_status(f"Error saving mappings: {e}", error=True)
+            except Exception as e:  # noqa: BLE001
+                self._show_status(f"Error saving mappings: {e}", error=True)
+        else:
+            valid_names = set(self.cache.customer_aliases.keys())
+            mappings = {
+                alias: field.text().strip()
+                for alias, field in self._alias_inputs.items()
+            }
+
+            unmapped = [a for a, v in mappings.items() if not v]
+            if unmapped:
+                self._show_status(
+                    "Please map all aliases before retrying. "
+                    f"Missing. {', '.join(unmapped)}",
+                    error=True,
+                )
+                return
+            invalid = [a for a, v in mappings.items() if v and v not in valid_names]
+            if invalid:
+                self._show_status(
+                    f"Unrecognized customer name(s) for : {', '.join(invalid)}. "
+                    "Use the autocomplete suggestions or add customer first.",
+                    error=True,
+                )
+                return
+
+            try:
+                alias_list: list[CustomerAlias] = []
+                for alias, customer in mappings.items():
+                    customer_id = self.cache.customers[customer]
+                    if customer_id:
+                        alias_list.append(
+                            CustomerAlias(alias=alias, customer_id=customer_id),
+                        )
+
+                success = self._factory.customer_aliases.create_bulk(alias_list)
+                if(success):
+                    self.cache.refresh()
+                    self._retry_insert()
+            except Exception as e:  # noqa: BLE001
+                self._show_status(f"Error saving mappings: {e}", error=True)
 
     # Code 3: Report Already Present
     def _build_overwrite_panel(self, layout: QVBoxLayout) -> None:
