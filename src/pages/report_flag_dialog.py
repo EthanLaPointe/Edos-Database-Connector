@@ -113,6 +113,8 @@ class ReportFlagDialog(QDialog):
         self.cache.refresh()
         self._resolution_panel = None
         self._status_lbl = None
+        self._badge_lbl = None
+        self._desc_lbl = None
         self._mfr_input = None
         self._customer_model: QStringListModel | None = None
         self._alias_inputs: dict[str, QLineEdit] = {}
@@ -123,7 +125,7 @@ class ReportFlagDialog(QDialog):
 
         self._build_ui()
 
-    def _build_ui(self) -> None:  # noqa: PLR0915 TODO look into separating to multiple functions
+    def _build_ui(self) -> None: #/e TODO look into separating to multiple functions
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 20)
         root.setSpacing(16)
@@ -138,12 +140,11 @@ class ReportFlagDialog(QDialog):
         root.addWidget(title_lbl)
 
         badge_text, badge_color = self._badge_info()
-        badge = QLabel(f" {badge_text} ")
-        badge.setObjectName("statusBadge")
-        badge.setStyleSheet(f"background-color: {badge_color};")
-        badge.setFixedHeight(22)
-        badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-        root.addWidget(badge)
+        self._badge_lbl = QLabel(f" {badge_text} ")
+        self._badge_lbl.setObjectName("statusBadge")
+        self._badge_lbl.setStyleSheet(f"background-color: {badge_color};")
+        self._badge_lbl.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        root.addWidget(self._badge_lbl)
 
         separator = QFrame()
         separator.setFrameShape(QFrame.HLine)
@@ -152,10 +153,10 @@ class ReportFlagDialog(QDialog):
 
         # Issue Description
         _, description, _ = RESULT_CODES.get(self.code, ("", "Unknown issue.", True))
-        desc_lbl = QLabel(description)
-        desc_lbl.setWordWrap(True)
-        desc_lbl.setObjectName("subtitle")
-        root.addWidget(desc_lbl)
+        self._desc_lbl = QLabel(description)
+        self._desc_lbl.setWordWrap(True)
+        self._desc_lbl.setObjectName("subtitle")
+        root.addWidget(self._desc_lbl)
 
         # Code Specific Resolution Panel
         self._resolution_panel = QFrame()
@@ -164,16 +165,7 @@ class ReportFlagDialog(QDialog):
         panel_layout.setContentsMargins(16, 16, 16, 16)
         panel_layout.setSpacing(12)
 
-        manuf_unknown = 1
-        unknown_alias = 2
-        already_exists = 3
-
-        if self.code == manuf_unknown:
-            self._build_manufacturer_panel(panel_layout)
-        elif self.code == unknown_alias:
-            self._build_aliases_panel(panel_layout)
-        elif self.code == already_exists:
-            self._build_overwrite_panel(panel_layout)
+        self._populate_panel(self.code, panel_layout)
 
         root.addWidget(self._resolution_panel)
 
@@ -194,6 +186,47 @@ class ReportFlagDialog(QDialog):
         btn_row.addWidget(close_btn)
 
         root.addLayout(btn_row)
+
+    def _populate_panel(self, code: int, layout: QVBoxLayout) -> None:
+        manuf_unknown = 1
+        unknown_alias = 2
+        already_exists = 3
+
+        if code == manuf_unknown:
+            self._build_manufacturer_panel(layout)
+        elif code == unknown_alias:
+            self._build_aliases_panel(layout)
+        elif code == already_exists:
+            self._build_overwrite_panel(layout)
+
+    def _rebuild_panel_for_code(self, new_code: int) -> None:
+        self.code = new_code
+
+        # Update Badge Label
+        badge_text, badge_color = self._badge_info()
+        self._badge_lbl.setText(f" {badge_text} ")
+        self._badge_lbl.setStyleSheet(f"background-color: {badge_color};")
+
+        # Update Description Label
+        _, description, _ = RESULT_CODES.get(new_code, ("", "Unknown issue.", True))
+        self._desc_lbl.setText(description)
+
+        # Clear all widgets from the panel layout
+        panel_layout = self._resolution_panel.layout()
+        while panel_layout.count():
+            item = panel_layout.takeAt(0)
+            if widget := item.widget():
+                widget.deleteLater()
+
+        # Reset per-panel state
+        self._mfr_input = None
+        self._customer_model = None
+        self._alias_inputs = {}
+
+        # Rebuild for new code
+        self._populate_panel(new_code, panel_layout)
+        self._resolution_panel.setEnabled(True)
+        self._status_lbl.hide()
 
     # Code 1: Manufacturer Unknown
     def _build_manufacturer_panel(self, layout: QVBoxLayout) -> None:
@@ -460,6 +493,8 @@ class ReportFlagDialog(QDialog):
             self._show_status(f"Success - {message}", error=False)
             self._resolution_panel.setEnabled(False)
             self.connector.close()
+        elif new_code != self.code and new_code in RESOLVABLE_CODES:
+            self._rebuild_panel_for_code(new_code)
         else:
             self._show_status(f"Still flagged: {message}", error=True)
 
