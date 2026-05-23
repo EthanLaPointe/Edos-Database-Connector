@@ -1,11 +1,22 @@
-/* ── Global ───────────────────────────────────────────────────────────────── */
+/* ==========================================================================
+   style.qss  -  forced dark theme
+   All colour values are explicit so no role falls back to the OS palette.
+   ========================================================================== */
+
+/* -- Global reset ---------------------------------------------------------- */
 * {
     font-family: "Segoe UI", system-ui, sans-serif;
     font-size: 13px;
     color: #e2e8f0;
+    /* Prevent any widget from inheriting a light background from the OS */
+    background-color: transparent;
 }
 
-QMainWindow, QWidget#central, QStackedWidget {
+/* -- Top-level surfaces -- */
+QMainWindow,
+QMainWindow > QWidget,
+QWidget#central,
+QStackedWidget {
     background-color: #0f1117;
 }
 
@@ -13,7 +24,37 @@ QDialog {
     background-color: #0f1117;
 }
 
-/* ── Generic frames ──────────────────────────────────────────────────────── */
+/* Generic QWidget fallback (catches dialogs, message boxes, etc.) */
+QWidget {
+    background-color: #0f1117;
+    color: #e2e8f0;
+}
+
+/* -- Message / Info boxes -- */
+QMessageBox {
+    background-color: #0f1117;
+    color: #e2e8f0;
+}
+
+QMessageBox QLabel {
+    color: #e2e8f0;
+    background-color: transparent;
+}
+
+QMessageBox QPushButton {
+    min-width: 80px;
+}
+
+/* -- Tool tips -- */
+QToolTip {
+    background-color: #1a1d27;
+    color: #e2e8f0;
+    border: 1px solid #1e2130;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+/* -- Generic frames -- */
 QFrame {
     background-color: transparent;
 }
@@ -56,9 +97,10 @@ QFrame#formSection {
     border-radius: 12px;
 }
 
-/* ── Labels ──────────────────────────────────────────────────────────────── */
+/* -- Labels -- */
 QLabel {
     background-color: transparent;
+    color: #e2e8f0;
 }
 
 QLabel#appTitle {
@@ -126,22 +168,18 @@ QLabel#userLabel {
     color: #64748b;
 }
 
-/* Section headings inside a page (smaller than pageTitle) */
 QLabel#sectionTitle {
     font-size: 15px;
     font-weight: 700;
     color: #f1f5f9;
 }
 
-/* Italic helper/hint lines beneath section headings */
 QLabel#hintLabel {
     font-size: 12px;
     font-style: italic;
     color: #64748b;
 }
 
-/* Coloured pill badge in the flag-resolution dialog.
-   background-color is set dynamically in Python; everything else lives here. */
 QLabel#statusBadge {
     color: #ffffff;
     border-radius: 4px;
@@ -163,24 +201,38 @@ QLabel#tableCell {
     background-color: transparent;
 }
 
-/* ── Inputs ──────────────────────────────────────────────────────────────── */
-QLineEdit, QTextEdit {
+/* -- Inputs -- */
+QLineEdit,
+QTextEdit,
+QPlainTextEdit {
     background-color: #13151f;
     border: 1px solid #1e2130;
     border-radius: 8px;
     padding: 8px 12px;
     color: #e2e8f0;
     selection-background-color: #3b82f6;
+    selection-color: #ffffff;
 }
 
-QLineEdit:focus, QTextEdit:focus {
+QLineEdit:focus,
+QTextEdit:focus,
+QPlainTextEdit:focus {
     border: 1px solid #3b82f6;
 }
 
-QLineEdit::placeholder {
+QLineEdit:disabled,
+QTextEdit:disabled {
+    background-color: #13151f;
+    color: #475569;
+    border-color: #1e2130;
+}
+
+QLineEdit::placeholder,
+QPlainTextEdit::placeholder {
     color: #475569;
 }
 
+/* -- Combo box -- */
 QComboBox {
     background-color: #13151f;
     border: 1px solid #1e2130;
@@ -192,6 +244,11 @@ QComboBox {
 
 QComboBox:focus {
     border: 1px solid #3b82f6;
+}
+
+QComboBox:disabled {
+    color: #475569;
+    border-color: #1e2130;
 }
 
 QComboBox::drop-down {
@@ -208,11 +265,13 @@ QComboBox QAbstractItemView {
     background-color: #1a1d27;
     border: 1px solid #1e2130;
     border-radius: 8px;
+    color: #e2e8f0;
     selection-background-color: #1e3a5f;
+    selection-color: #e2e8f0;
     outline: none;
 }
 
-/* ── Buttons ─────────────────────────────────────────────────────────────── */
+/* -- Buttons -- */
 QPushButton {
     background-color: #3b82f6;
     color: #ffffff;
@@ -285,10 +344,28 @@ QPushButton#cancelBtn:hover {
     color: #e2e8f0;
 }
 
-/* ── Radio buttons ───────────────────────────────────────────────────────── */
+QPushButton#secondaryBtn {
+    background-color: #1e2d4d;
+    color: #60a5fa;
+    border: 1px solid #1e3a5f;
+}
+
+QPushButton#secondaryBtn:hover {
+    background-color: #1e3a5f;
+    color: #93c5fd;
+}
+
+QPushButton#secondaryBtn:disabled {
+    background-color: #13151f;
+    color: #475569;
+    border-color: #1e2130;
+}
+
+/* -- Radio buttons -- */
 QRadioButton {
     color: #94a3b8;
     spacing: 6px;
+    background-color: transparent;
 }
 
 QRadioButton::indicator {
@@ -304,17 +381,93 @@ QRadioButton::indicator:checked {
     background-color: #3b82f6;
 }
 
-/* ── File queue list ─────────────────────────────────────────────────────── */
+/* -- Check boxes -- */
+QCheckBox {
+    color: #94a3b8;
+    spacing: 6px;
+    background-color: transparent;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 2px solid #475569;
+    background-color: transparent;
+}
+
+QCheckBox::indicator:checked {
+    border: 2px solid #3b82f6;
+    background-color: #3b82f6;
+}
+
+/* -- Table / list views -- */
+QTableView,
+QTreeView,
+QListView {
+    background-color: #1a1d27;
+    alternate-background-color: #13151f;
+    color: #e2e8f0;
+    border: none;
+    gridline-color: #1e2130;
+    selection-background-color: #1e2d4d;
+    selection-color: #e2e8f0;
+    outline: none;
+}
+
+QTableView::item,
+QTreeView::item,
+QListView::item {
+    color: #e2e8f0;
+    background-color: transparent;
+    padding: 4px 8px;
+}
+
+QTableView::item:selected,
+QTreeView::item:selected,
+QListView::item:selected {
+    background-color: #1e2d4d;
+    color: #e2e8f0;
+}
+
+QTableView::item:hover,
+QTreeView::item:hover,
+QListView::item:hover {
+    background-color: #1e2130;
+}
+
+/* -- Header views (QTableView column headers) -- */
+QHeaderView {
+    background-color: #13151f;
+    color: #64748b;
+}
+
+QHeaderView::section {
+    background-color: #13151f;
+    color: #64748b;
+    border: none;
+    border-bottom: 1px solid #1e2130;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+QHeaderView::section:hover {
+    background-color: #1e2130;
+    color: #94a3b8;
+}
+
+/* -- File queue list -- */
 QListWidget#fileQueue {
     background-color: transparent;
     border: none;
+    color: #e2e8f0;
 }
 
 QListWidget#fileQueue::item {
     background-color: #13151f;
     border-radius: 6px;
     padding: 8px 12px;
-    /* No color property here — lets setForeground() take effect per item */
 }
 
 QListWidget#fileQueue::item:selected {
@@ -325,7 +478,7 @@ QListWidget#fileQueue::item:hover {
     background-color: #1e2130;
 }
 
-/* ── Scroll area ─────────────────────────────────────────────────────────── */
+/* -- Scroll area -- */
 QScrollArea {
     border: none;
     background-color: transparent;
@@ -350,4 +503,93 @@ QScrollBar::handle:vertical:hover {
 QScrollBar::add-line:vertical,
 QScrollBar::sub-line:vertical {
     height: 0;
+}
+
+QScrollBar:horizontal {
+    background-color: transparent;
+    height: 6px;
+    margin: 0;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: #1e2130;
+    border-radius: 3px;
+    min-width: 30px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background-color: #2d3348;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+
+/* -- Menu bar & menus -- */
+QMenuBar {
+    background-color: #0f1117;
+    color: #e2e8f0;
+}
+
+QMenuBar::item {
+    background-color: transparent;
+    color: #e2e8f0;
+    padding: 4px 10px;
+}
+
+QMenuBar::item:selected,
+QMenuBar::item:pressed {
+    background-color: #1e2130;
+}
+
+QMenu {
+    background-color: #1a1d27;
+    color: #e2e8f0;
+    border: 1px solid #1e2130;
+    padding: 4px 0;
+}
+
+QMenu::item {
+    background-color: transparent;
+    color: #e2e8f0;
+    padding: 6px 24px 6px 12px;
+}
+
+QMenu::item:selected {
+    background-color: #1e2d4d;
+    color: #e2e8f0;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: #1e2130;
+    margin: 4px 0;
+}
+
+/* -- Splitter -- */
+QSplitter::handle {
+    background-color: #1e2130;
+}
+
+/* -- Status bar -- */
+QStatusBar {
+    background-color: #0f1117;
+    color: #64748b;
+}
+
+/* -- Form layouts (label text inside QFormLayout) -- */
+QFormLayout QLabel {
+    color: #94a3b8;
+    background-color: transparent;
+}
+
+/* -- Completer popup -- */
+QAbstractItemView {
+    background-color: #1a1d27;
+    color: #e2e8f0;
+    border: 1px solid #1e2130;
+    selection-background-color: #1e3a5f;
+    selection-color: #e2e8f0;
+    outline: none;
 }

@@ -285,6 +285,8 @@ class FileHandler:
             .astype(str)
             .str.replace(r"[.]", "", regex=True)
             .str.strip()
+            .str.split(",", n=1).str[0]
+            .str.strip()
         )
         # Expand all abbreviations in city column
         dataframe["city"] = self._expand_city_abbreviations(dataframe["city"])

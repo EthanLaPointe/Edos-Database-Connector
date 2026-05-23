@@ -118,7 +118,7 @@ class ReportFlagDialog(QDialog):
         self._alias_inputs: dict[str, QLineEdit] = {}
 
         self.setWindowTitle("Resolve Flag")
-        self.setMinimumWidth(750)
+        self.setMinimumWidth(800)
         self.setModal(True)
 
         self._build_ui()
