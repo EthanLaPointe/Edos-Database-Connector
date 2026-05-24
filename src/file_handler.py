@@ -40,7 +40,11 @@ REPORT_FIELD_LIST = [
 ]
 
 # List of fields an alias mapping list must contain
-MAPPING_FIELD_LIST = ["alias", "parent"]
+MAPPING_FIELD_LIST = [
+    "alias",
+    "parent",
+    "customer_name",
+]
 
 # Status codes for individual mappings
 MAPPING_CODES = {"valid": 0, "duplicate alias": 1, "unknown customer": 2}
@@ -434,10 +438,13 @@ class FileHandler:
 
         if (
             MAPPING_FIELD_LIST[0] in column_list
-            and MAPPING_FIELD_LIST[1] in column_list
+            and (
+                MAPPING_FIELD_LIST[1] in column_list
+                or MAPPING_FIELD_LIST[2] in column_list
+            )
         ):
             valid_columns = True
-            dataframe.columns = MAPPING_FIELD_LIST
+            dataframe.columns = MAPPING_FIELD_LIST[0:2]
             self.cache.refresh()
 
             dataframe.insert(loc=len(dataframe.columns), column="status", value=np.nan)

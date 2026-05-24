@@ -52,7 +52,12 @@ class App(QMainWindow):
         self.report_page = ReportPage(controller=self)
         self.alias_page = AliasPage(controller=self)
 
-        for page in (self.login_page, self.home_page, self.report_page, self.alias_page):  # noqa: E501
+        for page in (
+            self.login_page,
+            self.home_page,
+            self.report_page,
+            self.alias_page,
+        ):
             self.stack.addWidget(page)
 
         connection_status = 0

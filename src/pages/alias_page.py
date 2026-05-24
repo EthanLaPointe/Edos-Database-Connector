@@ -1,5 +1,6 @@
 """To Be Finished Later."""
 
+import csv
 from enum import Enum, auto
 from pathlib import Path
 from typing import ClassVar
@@ -391,7 +392,7 @@ class AliasPage(QWidget):
         layout.addSpacing(4)
 
         sub = QLabel(
-            "Select a CSV file with two columns: alias and customer name."
+            "Select a CSV file with two columns: alias and customer name. "
             "Preview the mappings below, then click Insert to save them.",
         )
         sub.setObjectName("subtitle")
@@ -474,6 +475,15 @@ class AliasPage(QWidget):
         # Submit Row
         submit_row = QHBoxLayout()
         submit_row.addStretch()
+
+        self.export_btn = QPushButton("Export Aliases")
+        self.export_btn.setMinimumSize(160, 44)
+        self.export_btn.setCursor(Qt.PointingHandCursor)
+        self.export_btn.setObjectName("secondaryBtn")
+        self.export_btn.clicked.connect(self._export_aliases)
+        submit_row.addWidget(self.export_btn)
+
+        submit_row.addSpacing(10)
 
         self.unknown_btn = QPushButton("Insert Unknown Customers")
         self.unknown_btn.setMinimumSize(200, 44)
@@ -663,12 +673,63 @@ class AliasPage(QWidget):
             f"An error occurred while processing:\n\n{message}",
         )
 
+    def _export_aliases(self) -> None:
+        if not self._cache:
+            QMessageBox.warning(self, "Not Ready", "Cache is not yet loaded.")
+            return
+
+        # Invert customer dict
+        id_to_name: dict[int, str] = {
+            cid: name for name, cid in self._cache.customers.items()
+        }
+
+        # Filter out any aliases that are identical to customer name
+        rows: list[tuple[str, str]] = []
+        for alias, customer_id in self._cache.customer_aliases.items():
+            customer_name = id_to_name.get(customer_id, "")
+            if alias != customer_name:
+                rows.append((alias, customer_name))
+
+        rows.sort(key=lambda r: (r[1], r[0]))
+
+        if not rows:
+            QMessageBox.information(
+                self, "Nothing to Export", "No alias mappings found.",
+            )
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Alias Mappings",
+            "alias_export.csv",
+            "CSV Files (*.csv);;All Files (*)",
+        )
+        if not path:
+            return
+
+        try:
+            with Path(path).open("w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["alias", "customer_name"])
+                writer.writerows(rows)
+
+            QMessageBox.information(
+                self,
+                "Export Complete",
+                f"Exported {len(rows)} alias mappings to:\n{Path(path).name}",
+            )
+        except OSError as e:
+            QMessageBox.critical(
+                self, "Export Failed", f"Could not write file:\n{e}",
+            )
+
     # Helpers
     def _lock_ui(self, *, locked: bool) -> None:
         self.choose_btn.setEnabled(not locked)
         self.clear_btn.setEnabled(not locked)
         self.unknown_btn.setEnabled(not locked)
         self.insert_btn.setEnabled(not locked)
+        self.export_btn.setEnabled(not locked)
 
     def _section_label(self, text: str) -> QLabel:
         lbl = QLabel(text)

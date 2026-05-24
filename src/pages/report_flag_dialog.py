@@ -125,7 +125,7 @@ class ReportFlagDialog(QDialog):
 
         self._build_ui()
 
-    def _build_ui(self) -> None: #/e TODO look into separating to multiple functions
+    def _build_ui(self) -> None: # noqa: PLR0915 TODO separate into multiple funcitons
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 20)
         root.setSpacing(16)
@@ -170,10 +170,21 @@ class ReportFlagDialog(QDialog):
         root.addWidget(self._resolution_panel)
 
         # Status Label After Retry
+        status_row = QHBoxLayout()
+
         self._status_lbl = QLabel("")
         self._status_lbl.setWordWrap(True)
-        self._status_lbl.hide()
-        root.addWidget(self._status_lbl)
+        self._status_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        status_row.addWidget(self._status_lbl, stretch=1)
+
+        self._clear_status_btn = QPushButton("Clear")
+        self._clear_status_btn.setObjectName("cancelBtn")
+        self._clear_status_btn.setCursor(Qt.PointingHandCursor)
+        self._clear_status_btn.hide()
+        self._clear_status_btn.clicked.connect(self._clear_status)
+        status_row.addWidget(self._clear_status_btn)
+
+        root.addLayout(status_row)
 
         # Button Row
         btn_row = QHBoxLayout()
@@ -230,7 +241,8 @@ class ReportFlagDialog(QDialog):
         # Rebuild for new code
         self._populate_panel(new_code, self._resolution_panel.layout())
         self._resolution_panel.setEnabled(True)
-        self._status_lbl.hide()
+        self._status_lbl.setText("")
+        self._clear_status_btn.hide()
 
     # Code 1: Manufacturer Unknown
     def _build_manufacturer_panel(self, layout: QVBoxLayout) -> None:
@@ -336,9 +348,10 @@ class ReportFlagDialog(QDialog):
         lower_layout.addWidget(add_cust_btn)
         layout.addWidget(lower)
 
-        save_btn = QPushButton("Save Mappings & Retry")
+        save_btn = QPushButton("Save Mappings && Retry")
         save_btn.setCursor(Qt.PointingHandCursor)
         save_btn.setMinimumHeight(38)
+        save_btn.setMinimumWidth(180)
         save_btn.clicked.connect(self._resolve_aliases)
         layout.addWidget(save_btn)
 
@@ -513,7 +526,11 @@ class ReportFlagDialog(QDialog):
         self._status_lbl.style().unpolish(self._status_lbl)
         self._status_lbl.style().polish(self._status_lbl)
         self._status_lbl.setText(text)
-        self._status_lbl.show()
+        self._clear_status_btn.show()
+
+    def _clear_status(self) -> None:
+        self._status_lbl.setText("")
+        self._clear_status_btn.hide()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
         """Clear connector dependant objects and close DB connection."""
