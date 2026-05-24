@@ -683,12 +683,10 @@ class AliasPage(QWidget):
             cid: name for name, cid in self._cache.customers.items()
         }
 
-        # Filter out any aliases that are identical to customer name
         rows: list[tuple[str, str]] = []
         for alias, customer_id in self._cache.customer_aliases.items():
             customer_name = id_to_name.get(customer_id, "")
-            if alias != customer_name:
-                rows.append((alias, customer_name))
+            rows.append((alias, customer_name))
 
         rows.sort(key=lambda r: (r[1], r[0]))
 

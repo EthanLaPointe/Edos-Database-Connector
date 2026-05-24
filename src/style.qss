@@ -402,23 +402,25 @@ QCheckBox::indicator:checked {
 }
 
 /* -- Table / list views -- */
+/* NOTE: 'color' is intentionally omitted from QTableView/QListView and all
+   ::item sub-rules so that Qt.ForegroundRole colours set by the model
+   (e.g. status colours in AliasMappingModel) are not overridden by the
+   stylesheet. The palette WindowText role (set to #e2e8f0 in Main.py)
+   provides the default text colour for items that do not set ForegroundRole. */
 QTableView,
 QTreeView,
 QListView {
     background-color: #1a1d27;
     alternate-background-color: #13151f;
-    color: #e2e8f0;
     border: none;
     gridline-color: #1e2130;
     selection-background-color: #1e2d4d;
-    selection-color: #e2e8f0;
     outline: none;
 }
 
 QTableView::item,
 QTreeView::item,
 QListView::item {
-    color: #e2e8f0;
     background-color: transparent;
     padding: 4px 8px;
 }
@@ -427,7 +429,6 @@ QTableView::item:selected,
 QTreeView::item:selected,
 QListView::item:selected {
     background-color: #1e2d4d;
-    color: #e2e8f0;
 }
 
 QTableView::item:hover,
