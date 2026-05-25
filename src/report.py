@@ -1,5 +1,6 @@
 """Module provides the Report class for reading and storing .csv format reports."""
 
+import csv
 import re
 from pathlib import Path
 
@@ -43,7 +44,20 @@ class Report:
 
         """
         self.filePath = Path(file_path)
-        self.dataframe = pd.read_csv(self.filePath, encoding="latin-1").astype(str)
+
+        # Use csv.DictReader to properly handle multiline quoted values
+        with Path.open(self.filePath, encoding="latin-1") as f:
+            reader = csv.DictReader(f)
+            # Get fieldnames to preserve column order
+            fieldnames = reader.fieldnames
+            rows = list(reader)
+
+        # Create DataFrame with explicit column order, filtering out None columns
+        valid_fields = [f for f in fieldnames if f is not None]
+        self.dataframe = pd.DataFrame(
+            [{k: row.get(k) for k in valid_fields} for row in rows],
+        ).astype(str)
+
         self.reportName = self.filePath.name
         self.manufacturerName = self.reportName.split()[0].lower()
 
@@ -51,7 +65,7 @@ class Report:
         match = re.search(r"(January|February|March|April|May|June|July|August|September|October|November|December)",  # noqa: E501
                           self.reportName)
         if match is not None:
-            self.month = self.reportName[match.start(): match.end()]
+            self.month = self.reportName[match.start(): match.end()].lower()
             self.year = self.reportName[match.end() + 1: match.end() + 5]
         else:
             print("Date not found")  # noqa: T201

@@ -4,7 +4,6 @@ Used for the cleaning, validation, and insertion, of report files into the datab
 Also used for the reading, cleaning, validation, and insertion, of alias mapping files.
 """
 
-import csv
 import re
 from decimal import Decimal
 from pathlib import Path
@@ -199,7 +198,6 @@ class FileHandler:
         self.dao.sale_customers.create_bulk(sale_customer_list)
         self.dao.report_lines.create_bulk(report_line_list)
 
-    # look into changing to use dataframes header row instead of reading file
     def trim_report(self, dataframe: pd.DataFrame, file_path: str) -> pd.DataFrame:
         """Trim a report to contain only desired fields.
 
@@ -210,19 +208,17 @@ class FileHandler:
                 The filepath of the report .csv.
 
         """
+        header = [col.lower() for col in dataframe.columns]
         fields_to_keep = []
-        with Path.open(file_path) as csv_file:
-            csv_reader = csv.reader(csv_file, delimiter=",")
-            header = next(csv_reader)
 
-        #Check column numbers for each desired field
+        # Check column numbers for each desired field
         for field in REPORT_FIELD_LIST:
             for idx, col in enumerate(header):
-                if field in col.lower():
+                if field in col:
                     fields_to_keep.append(idx)
                     break
 
-        #Trim DF to only contain desired columns
+        # Trim DF to only contain desired columns
         return dataframe.iloc[:, fields_to_keep]
 
     def _expand_city_abbreviations(self, series: pd.Series) -> pd.Series:
@@ -246,44 +242,45 @@ class FileHandler:
 
     def fill_empty(self, dataframe: pd.DataFrame) -> pd.DataFrame:
         """Fill empty rows and add any missing dataframe columns."""
-        #Loop through desired fields
-        header_locations = []
+        normalized_columns = []
+
         for field in REPORT_FIELD_LIST:
-            field_found = False
-            #Check if field is present in header row
-            for idx, col in enumerate(dataframe.columns):
-                #If present add fields location to location list
-                if field in col.lower():
-                    header_locations.append(idx)
-                    field_found = True
-                    break
-            # If desired field is not found insert it
-            # next to the most recently found field
-            if not field_found:
-                dataframe.insert(
-                    loc=header_locations[-1] + 1,
-                    column=field,
-                    value=np.nan,
-                )
-        # Update column names to match field list
+            match = next(
+                (
+                    col
+                    for col in dataframe.columns
+                    if field in str(col).lower()
+                ),
+                None,
+            )
+            if match is None:
+                dataframe[field] = np.nan
+                normalized_columns.append(field)
+            else:
+                normalized_columns.append(match)
+
+        dataframe = dataframe[normalized_columns]
         dataframe.columns = REPORT_FIELD_LIST
+
         # Lowercase only string columns (avoid applymap to be robust)
         dataframe = dataframe.apply(
             lambda col: col.str.lower()
             if pd.api.types.is_string_dtype(col) else col,
         )
         # Change instances of nan to proper datatypes in each col
+        # For quantity: remove special chars, convert to numeric, fill NaN with 0
         dataframe["quantity"] = (
             dataframe["quantity"]
-            .fillna(0)
             .astype(str)
-            .str.replace(r"[$,)#]", "", regex=True)
+            .str.replace(r"[$,)#\*]", "", regex=True)
             .str.strip()
-            .astype(float)
-            .astype(int)
+        )
+        dataframe["quantity"] = (
+            pd.to_numeric(dataframe["quantity"], errors="coerce").fillna(0).astype(int)
         )
         dataframe["saledate"] = dataframe["saledate"].fillna(None)
         # Remove special characters and strip whitespace from cities
+        dataframe["city"] = dataframe["city"].replace({np.nan: ""})
         dataframe["city"] = (
             dataframe["city"]
             .astype(str)
@@ -292,6 +289,7 @@ class FileHandler:
             .str.split(",", n=1).str[0]
             .str.strip()
         )
+        dataframe["city"] = dataframe["city"].replace({"": None})
         # Expand all abbreviations in city column
         dataframe["city"] = self._expand_city_abbreviations(dataframe["city"])
         # Strip whitespace from state
@@ -326,7 +324,6 @@ class FileHandler:
             None,
             dataframe["quantity"],
         )
-
         return dataframe
 
     def standardize_report(self, report: Report) -> Report:
