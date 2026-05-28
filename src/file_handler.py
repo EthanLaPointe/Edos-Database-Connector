@@ -198,14 +198,12 @@ class FileHandler:
         self.dao.sale_customers.create_bulk(sale_customer_list)
         self.dao.report_lines.create_bulk(report_line_list)
 
-    def trim_report(self, dataframe: pd.DataFrame, file_path: str) -> pd.DataFrame:
+    def trim_report(self, dataframe: pd.DataFrame) -> pd.DataFrame:
         """Trim a report to contain only desired fields.
 
         Args:
             dataframe (Pandas.DataFrame):
                 The dataframe of the report to trim.
-            file_path (str):
-                The filepath of the report .csv.
 
         """
         header = [col.lower() for col in dataframe.columns]
@@ -339,10 +337,7 @@ class FileHandler:
 
         """
         report.dataframe = self.fill_empty(
-            self.trim_report(
-                report.dataframe,
-                report.filePath,
-            ),
+            self.trim_report(report.dataframe),
         )
         return report
 

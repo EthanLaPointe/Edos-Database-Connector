@@ -84,6 +84,7 @@ class InsertWorker(QThread):
         handler = FileHandler(factory, self.cache)
 
         try:
+            self.cache.refresh()
             for i, report in enumerate(self.reports):
                 code = self._insert_report(handler, report)
                 self.file_done.emit(i, code)
