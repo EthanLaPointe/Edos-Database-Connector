@@ -190,6 +190,15 @@ class SalesReport:
     report_month: str
 
 @dataclass
+class SalesReportSummary:
+    """Dataclass for report list display."""
+
+    report_id: int
+    manufacturer_name: str
+    report_month: str
+    report_year: str
+
+@dataclass
 class SaleCustomer:
     """Dataclass to hold sale customer information from database."""
 
@@ -1214,6 +1223,40 @@ class SalesReportDAO(DAO):
                 "DELETE FROM sales_report WHERE report_id = %s",
                 (report_id,),
             )
+
+    def list_summary(self, limit: int = 50) -> list["SalesReportSummary"]:
+        """Return recent reports joined with manufacturer name for display.
+
+        Args:
+            limit (int):
+                Maximum number of reports to return. Defaults to 50.
+
+        Returns:
+            list[SalesReportSummary]:
+                Reports ordered by year DESC, month DESC so the most
+                recent appears first.
+
+        """
+        query = (
+            "SELECT sr.report_id, m.manufacturer_name, "
+            "sr.report_month, sr.report_year "
+            "FROM sales_report sr "
+            "JOIN manufacturers m ON sr.manufacturer_id = m.manufacturer_id "
+            "ORDER BY sr.report_year DESC, sr.report_month DESC "
+            "LIMIT %s"
+        )
+        with self.connector.cursor() as cursor:
+            cursor.execute(query, (limit,))
+            rows = cursor.fetchall()
+        return [
+            SalesReportSummary(
+                report_id=row[0],
+                manufacturer_name=row[1],
+                report_month=row[2],
+                report_year=row[3],
+            )
+            for row in rows
+        ]
 
 class SaleCustomerDAO(DAO):
     """To be finished later."""

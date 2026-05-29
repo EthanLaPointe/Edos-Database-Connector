@@ -1,4 +1,4 @@
-"""_summary_."""  # noqa: N999
+"""_summary_."""
 import os
 import sys
 from pathlib import Path
