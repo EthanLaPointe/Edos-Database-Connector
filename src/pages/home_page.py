@@ -44,7 +44,7 @@ class _ExportWorker(QThread):
     """Exports a single report to CSV on a background thread."""
 
     done = Signal(int)
-    error = Signal(int)
+    error = Signal(str)
 
     def __init__(self, report_id: int, path: str) -> None:
         """Store export parameters.
@@ -56,7 +56,7 @@ class _ExportWorker(QThread):
         """
         super().__init__()
         self._report_id = report_id
-        self._path = path
+        self.path = path
 
     def run(self) -> None:
         """Connect, export, always close the connection."""
@@ -64,7 +64,7 @@ class _ExportWorker(QThread):
         try:
             connector.connect()
             exporter = ReportExporter(connector)
-            count = exporter.export_to_csv(self._report_id, self._path)
+            count = exporter.export_to_csv(self._report_id, self.path)
             self.done.emit(count)
         except Exception as e:  # noqa: BLE001
             self.error.emit(str(e))
@@ -187,6 +187,11 @@ class HomePage(QWidget):
             return container
 
         # Data Rows
+        def _make_export_handler(s: SalesReportSummary):
+            def handler() -> None:
+                self._start_export(s)
+            return handler
+
         for r, summary in enumerate(summaries):
             row_frame = QFrame()
             row_layout = QHBoxLayout(row_frame)
@@ -206,10 +211,7 @@ class HomePage(QWidget):
             export_btn.setFixedWidth(80)
             export_btn.setObjectName("secondaryBtn")
             export_btn.setCursor(Qt.PointingHandCursor)
-
-            export_btn.clicked.connect(
-                lambda _checked=False, s=summary: self._start_export(s),
-            )
+            export_btn.clicked.connect(_make_export_handler(summary))
             row_layout.addWidget(export_btn)
             layout.addWidget(row_frame)
 
@@ -240,7 +242,7 @@ class HomePage(QWidget):
     def _on_summaries_loaded(self, summaries: list[SalesReportSummary]) -> None:
         self._replace_table(summaries)
 
-    def _on_summary_error(self, message: str) -> None:
+    def _on_summary_error(self, message: str) -> None:  # noqa: ARG002 Add error message handling
         self._replace_table(None)
 
     # Export
@@ -269,11 +271,17 @@ class HomePage(QWidget):
             report_id=summary.report_id,
             path=path,
         )
-        self._export_worker.done.connect(
-            lambda count, p=path: self._on_export_done(count, p),
-        )
+        self._export_worker.done.connect(self._on_export_done)
         self._export_worker.error.connect(self._on_export_error)
         self._export_worker.start()
+
+    def _on_export_done(self, row_count: int) -> None:
+        path = self._export_worker.path
+        QMessageBox.information(
+            self,
+            "Export Complete",
+            f"Exported {row_count} row(s) to {Path(path).name}.",
+        )
 
     def _on_export_error(self, message: str) -> None:
         QMessageBox.critical(

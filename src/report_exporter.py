@@ -81,7 +81,7 @@ class ReportExporter:
 
         """
         with self.connector.cursor() as cursor:
-            cursor.execute(_REPORT_QUERY, (report_id))
+            cursor.execute(_REPORT_QUERY, (report_id,))
             rows = cursor.fetchall()
 
         if not rows:
@@ -116,11 +116,11 @@ class ReportExporter:
             cursor_factory=psycopg2.extras.RealDictCursor,
         ) as cur:
             cur.itersize = chunk_size
-            cur.execute(_REPORT_QUERY, (report_id))
+            cur.execute(_REPORT_QUERY, (report_id,))
             buffer: list[dict] = []
             for row in cur:
                 buffer.append(dict(row))
-                if len(buffer >= chunk_size):
+                if len(buffer) >= chunk_size:
                     yield pd.DataFrame(buffer, columns=EXPORT_COLUMNS)
                     buffer.clear()
             if buffer:
