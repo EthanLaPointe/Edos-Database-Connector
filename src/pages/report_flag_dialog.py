@@ -50,6 +50,7 @@ STATUS_COLORS: dict[str, str] = {
     "processing": "#60a5fa",
     "success":    "#22c55e",
     "warning":    "#f59e0b",
+    "duplicate":  "#70faed",
     "error":      "#ef4444",
 }
 
@@ -57,7 +58,7 @@ CODE_TO_STATUS: dict[int, str] = {
     0: "success",
     1: "warning",
     2: "warning",
-    3: "warning",
+    3: "duplicate",
     4: "error",
 }
 

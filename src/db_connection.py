@@ -1242,7 +1242,7 @@ class SalesReportDAO(DAO):
             "sr.report_month, sr.report_year "
             "FROM sales_report sr "
             "JOIN manufacturers m ON sr.manufacturer_id = m.manufacturer_id "
-            "ORDER BY sr.report_year DESC, sr.report_month DESC "
+            "ORDER BY sr.report_id DESC "
             "LIMIT %s"
         )
         with self.connector.cursor() as cursor:

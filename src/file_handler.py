@@ -277,6 +277,7 @@ class FileHandler:
             pd.to_numeric(dataframe["quantity"], errors="coerce").fillna(0).astype(int)
         )
         dataframe["saledate"] = dataframe["saledate"].fillna(None)
+        dataframe["saledate"] = dataframe["saledate"].replace({"": None})
         # Remove special characters and strip whitespace from cities
         dataframe["city"] = dataframe["city"].replace({np.nan: ""})
         dataframe["city"] = (
