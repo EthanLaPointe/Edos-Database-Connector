@@ -38,6 +38,53 @@ REPORT_FIELD_LIST = [
     "transfer",
 ]
 
+# List of state codes to ignore
+STATE_LIST = [
+    "AL",
+    "AK",
+    "AZ",
+    "AR",
+    "CA",
+    "CO",
+    "DE",
+    "FL",
+    "GA",
+    "HI",
+    "ID",
+    "IL",
+    "IN",
+    "IA",
+    "KS",
+    "KY",
+    "LA",
+    "MD",
+    "MI",
+    "MN",
+    "MS",
+    "MO",
+    "MT",
+    "NE",
+    "NV",
+    "NJ",
+    "NM",
+    "NC",
+    "ND",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "UT",
+    "VA",
+    "WA",
+    "WV",
+    "WI",
+    "WY",
+]
+
 # List of fields an alias mapping list must contain
 MAPPING_FIELD_LIST = [
     "alias",
@@ -241,6 +288,7 @@ class FileHandler:
     def fill_empty(self, dataframe: pd.DataFrame) -> pd.DataFrame:
         """Fill empty rows and add any missing dataframe columns."""
         normalized_columns = []
+        pattern = re.compile("|".join(re.escape(x) for x in STATE_LIST))
 
         for field in REPORT_FIELD_LIST:
             match = next(
@@ -292,7 +340,10 @@ class FileHandler:
         # Expand all abbreviations in city column
         dataframe["city"] = self._expand_city_abbreviations(dataframe["city"])
         # Strip whitespace from state
+        dataframe["state"] = dataframe["state"].replace({np.nan: ""})
+        dataframe = dataframe[~dataframe["state"].str.contains(pattern, regex=True)]
         dataframe["state"] = dataframe["state"].astype(str).str.strip()
+        dataframe["state"] = dataframe["state"].replace({"": None})
         # Remove any $ from amount column
         dataframe["amount"] = (
             dataframe["amount"]
@@ -313,6 +364,9 @@ class FileHandler:
             .str.replace(r" +", " ", regex=True)
             .str.strip()
         )
+        dataframe = dataframe[~dataframe["customername"]
+                              .str.contains(r"\bedos\b", regex=True, na=False)
+                    ]
         #Fill any leftover empty cells with None
         dataframe = dataframe.replace({np.nan: None})
         #Remove any row where amount is 0

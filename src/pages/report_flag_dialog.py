@@ -264,9 +264,10 @@ class ReportFlagDialog(QDialog):
         form.addRow("Manufacturer name:", self._mfr_input)
         layout.addLayout(form)
 
-        add_btn = QPushButton("Add Manufacturer & Retry")
+        add_btn = QPushButton("Add Manufacturer && Retry")
         add_btn.setCursor(Qt.PointingHandCursor)
         add_btn.setMinimumHeight(38)
+        add_btn.setMinimumWidth(100)
         add_btn.clicked.connect(self._resolve_manufacturer)
         layout.addWidget(add_btn)
 
@@ -292,6 +293,7 @@ class ReportFlagDialog(QDialog):
     # Code 2: Unknown Aliases
     def _build_aliases_panel(self, layout: QVBoxLayout) -> None:
         unknown_aliases: list[str] = getattr(self.report, "unknown_aliases", [])
+        unknown_aliases = sorted(unknown_aliases)
 
         info = QLabel(
             f"{len(unknown_aliases)} unrecognised customer alias(es) were found. \n"
