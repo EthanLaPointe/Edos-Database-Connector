@@ -54,8 +54,7 @@ class DBConnector:
                 raise
 
     def close(self) -> None:
-        """Close cursor and then the currently active connection."""
-        self.conn.cursor().close()
+        """Close the currently active connection."""
         self.conn.close()
 
     def connect(self) -> None:

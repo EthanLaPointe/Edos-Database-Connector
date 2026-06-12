@@ -67,8 +67,6 @@ class Report:
         if match is not None:
             self.month = self.reportName[match.start(): match.end()].lower()
             self.year = self.reportName[match.end() + 1: match.end() + 5]
-        else:
-            print("Date not found")  # noqa: T201
 
     def clear_info(self) -> None:
         """Reset all class variables to default empty values."""

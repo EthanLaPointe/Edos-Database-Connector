@@ -106,10 +106,6 @@ class ReportFlagDialog(QDialog):
         self.report = report
         self.code = code
         self.queue_index = queue_index
-        self.connector = DBConnector()
-        self.connector.connect()
-        self._factory = DAOFactory(self.connector)
-        self._handler = FileHandler(self._factory, cache)
         self.cache = cache
         self.cache.refresh()
         self._resolution_panel = None
@@ -272,12 +268,15 @@ class ReportFlagDialog(QDialog):
         layout.addWidget(add_btn)
 
     def _resolve_manufacturer(self) -> None:
+        connector = DBConnector()
+        connector.connect()
+        _factory = DAOFactory(connector)
         name = self._mfr_input.text().strip().lower()
         if not name:
             self._show_status("Please enter a manufacturer name.", error=True)
             return
         try:
-            manufacturer = self._factory.manufacturers.create(
+            manufacturer = _factory.manufacturers.create(
                 Manufacturer(manufacturer_id=None, manufacturer_name=name),
             )
             if (
@@ -289,6 +288,8 @@ class ReportFlagDialog(QDialog):
                 self._retry_insert()
         except Exception as e:  # noqa: BLE001
             self._show_status(f"Error adding manufacturer: {e}", error=True)
+        finally:
+            connector.close()
 
     # Code 2: Unknown Aliases
     def _build_aliases_panel(self, layout: QVBoxLayout) -> None:
@@ -373,7 +374,10 @@ class ReportFlagDialog(QDialog):
 
     def _add_new_customer(self, cust_name: str) -> None:
         try:
-            customer = self._factory.customers.create(
+            connector = DBConnector()
+            connector.connect()
+            _factory = DAOFactory(connector)
+            customer = _factory.customers.create(
                 Customer(customer_id=None, customer_name=cust_name),
             )
             self.cache.customers[customer.customer_name] = customer.customer_id
@@ -385,11 +389,16 @@ class ReportFlagDialog(QDialog):
             )
         except Exception as e:  # noqa: BLE001
             self._show_status(f"Failed to insert new customer: {e}", error=True)
+        finally:
+            connector.close()
 
     def _add_as_new_customer(self, alias: str, row: QWidget) -> None:
         if alias in self._alias_inputs:
             try:
-                customer = self._factory.customers.create(
+                connector = DBConnector()
+                connector.connect()
+                _factory = DAOFactory(connector)
+                customer = _factory.customers.create(
                     Customer(customer_id=None, customer_name=alias),
                 )
                 alias_key = customer.customer_name
@@ -408,6 +417,8 @@ class ReportFlagDialog(QDialog):
                     f"Failed to insert new customer: {traceback.format_exc()}",
                     error=True,
                 )
+            finally:
+                connector.close()
 
     def _resolve_aliases(self) -> None:
         if len(self._alias_inputs) == 0:
@@ -440,6 +451,9 @@ class ReportFlagDialog(QDialog):
                 return
 
             try:
+                connector = DBConnector()
+                connector.connect()
+                _factory = DAOFactory(connector)
                 alias_list: list[CustomerAlias] = []
                 for alias, customer in mappings.items():
                     customer_id = self.cache.customers[customer]
@@ -448,12 +462,14 @@ class ReportFlagDialog(QDialog):
                             CustomerAlias(alias=alias, customer_id=customer_id),
                         )
 
-                success = self._factory.customer_aliases.create_bulk(alias_list)
+                success = _factory.customer_aliases.create_bulk(alias_list)
                 if(success):
                     self.cache.refresh()
                     self._retry_insert()
             except Exception as e:  # noqa: BLE001
                 self._show_status(f"Error saving mappings: {e}", error=True)
+            finally:
+                connector.close()
 
     # Code 3: Report Already Present
     def _build_overwrite_panel(self, layout: QVBoxLayout) -> None:
@@ -485,7 +501,11 @@ class ReportFlagDialog(QDialog):
 
     def _retry_insert(self) -> None:
         try:
-            valid = self._handler.check_report(self.report)
+            connector = DBConnector()
+            connector.connect()
+            _factory = DAOFactory(connector)
+            _handler = FileHandler(_factory, self.cache)
+            valid = _handler.check_report(self.report)
 
             unknown_list = valid[1]
             manufacturer_exists = valid[0][0]
@@ -494,7 +514,7 @@ class ReportFlagDialog(QDialog):
             if report_already_exists:
                 new_code = 3
             elif manufacturer_exists and len(unknown_list) == 0:
-                self._handler.insert_report(self.report)
+                _handler.insert_report(self.report)
                 new_code = 0
             elif not manufacturer_exists:
                 new_code = 1
@@ -505,6 +525,8 @@ class ReportFlagDialog(QDialog):
             self._emit_retry(new_code)
         except Exception:  # noqa: BLE001
             self._show_status(f"Retry failed: {traceback.format_exc()},", error=True)
+        finally:
+            connector.close()
 
     def _emit_retry(self, new_code: int) -> None:
         self.retry_done.emit(self.queue_index, new_code)
@@ -512,7 +534,6 @@ class ReportFlagDialog(QDialog):
         if new_code == 0:
             self._show_status(f"Success - {message}", error=False)
             self._resolution_panel.setEnabled(False)
-            self.connector.close()
         elif new_code != self.code and new_code in RESOLVABLE_CODES:
             self._rebuild_panel_for_code(new_code)
         else:
@@ -537,7 +558,4 @@ class ReportFlagDialog(QDialog):
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
         """Clear connector dependant objects and close DB connection."""
-        self._factory = None
-        self._handler = None
-        self.connector.close()
         super().closeEvent(event)
