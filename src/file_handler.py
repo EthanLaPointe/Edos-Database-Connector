@@ -133,6 +133,7 @@ class FileHandler:
                 The Report object containing the sales report information.
 
         """
+        self.cache.refresh_all()
         line_data = {
             "customername": "",
             "city": "",
@@ -360,11 +361,12 @@ class FileHandler:
             .fillna(0.0)
             .astype(float)
         )
-        #Remove special characters from customer name
+        # Remove any text inside parenthesis and special characters
         dataframe["customername"] = (
             dataframe["customername"]
             .astype(str)
-            .str.replace(r"[.'(),-]", "", regex=True)
+            .str.replace(r"\(.*?\)", "", regex=True)
+            .str.replace(r"[.'(),-_]", " ", regex=True)
             .str.replace(r" +", " ", regex=True)
             .str.strip()
         )
@@ -500,7 +502,7 @@ class FileHandler:
         dataframe.columns = MAPPING_FIELD_LIST
 
         # Refresh cache before status check to ensure customer list is current
-        self.cache.refresh()
+        self.cache.refresh_customers()
 
         dataframe.insert(loc=len(dataframe.columns), column="status", value=np.nan)
 

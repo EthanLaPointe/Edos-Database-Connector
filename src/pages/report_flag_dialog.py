@@ -464,7 +464,7 @@ class ReportFlagDialog(QDialog):
 
                 success = _factory.customer_aliases.create_bulk(alias_list)
                 if(success):
-                    self.cache.refresh()
+                    self.cache.refresh_customer_aliases()
                     self._retry_insert()
             except Exception as e:  # noqa: BLE001
                 self._show_status(f"Error saving mappings: {e}", error=True)

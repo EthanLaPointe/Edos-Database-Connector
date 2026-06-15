@@ -187,7 +187,7 @@ class HomePage(QWidget):
             return container
 
         # Data Rows
-        def _make_export_handler(s: SalesReportSummary):
+        def _make_export_handler(s: SalesReportSummary) -> None:
             def handler() -> None:
                 self._start_export(s)
             return handler

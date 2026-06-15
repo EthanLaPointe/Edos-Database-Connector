@@ -301,7 +301,7 @@ class AliasWorker(QThread):
             for name in self._unknown_names
         ]
         factory.customers.create_bulk(customer_list)
-        self.cache.refresh()
+        self.cache.refresh_customer_aliases()
         self.unknown_insert_done.emit()
 
     def _insert(self, handler: FileHandler) -> None:
@@ -310,7 +310,7 @@ class AliasWorker(QThread):
             .drop(columns=["status"])
         )
         success = handler.insert_alias_mappings(filtered)
-        self.cache.refresh()
+        self.cache.refresh_customer_aliases()
         self.all_done.emit(success)
 
     # Public worker methods

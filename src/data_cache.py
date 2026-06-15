@@ -19,9 +19,9 @@ class DataCache:
         self.customers: dict = {}
         self.items: dict = {}
         self.manufacturers: dict = {}
-        self.refresh()
+        self.refresh_all()
 
-    def refresh(self) -> None:
+    def refresh_all(self) -> None:
         """Refresh all dicts of DB data."""
         self.locations = self._factory.locations.get_all_as_dict()
         self.customer_aliases = (
@@ -30,4 +30,28 @@ class DataCache:
         )
         self.customers = self._factory.customers.get_all_as_dict()
         self.items = self._factory.items.get_all_as_dict()
+        self.manufacturers = self._factory.manufacturers.get_all_as_dict()
+
+    def refresh_locations(self) -> None:
+        """Refresh location dict."""
+        self.locations = self._factory.locations.get_all_as_dict()
+
+    def refresh_customer_aliases(self) -> None:
+        """Refresh both customer and alias dicts."""
+        self.customers = self._factory.customers.get_all_as_dict()
+        self.customer_aliases = (
+            self._factory.customer_aliases.get_all_as_dict()
+            | self.customers
+        )
+
+    def refresh_customers(self) -> None:
+        """Refresh customer dict."""
+        self.customers = self._factory.customers.get_all_as_dict()
+
+    def refresh_items(self) -> None:
+        """Refresh item dict."""
+        self.items = self._factory.items.get_all_as_dict()
+
+    def refresh_manufacturers(self) -> None:
+        """Refresh manufacturer dict."""
         self.manufacturers = self._factory.manufacturers.get_all_as_dict()

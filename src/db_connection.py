@@ -169,6 +169,7 @@ class Manufacturer:
 
     manufacturer_id: int | None
     manufacturer_name: str
+    manufacturer_classification: str
 
 @dataclass
 class Item:
@@ -204,6 +205,17 @@ class SaleCustomer:
     report_id: int
     customer_id: int
     location_id: int
+
+@dataclass
+class Representative:
+    """Dataclass to hold representative team information."""
+
+    representative_id: int
+    customer_id: int
+    location_id: int
+    team_name: str
+    heating_rep: str
+    plumbing_rep: str
 
 @dataclass
 class ReportLine:
@@ -1373,6 +1385,166 @@ class SaleCustomerDAO(DAO):
                 page_size=500,
             )
             return None
+
+class RepresentativeDAO(DAO):
+    """To be finished later."""
+
+    _table = "representatives"
+    _pk = "representative_id"
+    _select = ("Select representative_id, "
+               "customer_id, "
+               "location_id, "
+               "team_name, "
+               "heating_rep, "
+               "plumbing_rep, "
+            )
+
+    def _from_row(self, row: tuple[Any, ...]) -> Representative:
+        return Representative(
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+        )
+
+    def get_by_id(self, representative_id: int) -> Representative | None:
+        """Retrieve a representative team based on its ID.
+
+        Args:
+            representative_id (int):
+                The ID of the representative team to retrieve.
+
+        Returns:
+            Representative | None:
+                The Representative associated with the ID if it exists
+                or None if it does not.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(
+                f"{self._select} FROM {self._table} WHERE representative_id = %s",
+                (representative_id,),
+            )
+            row = cursor.fetchone()
+            return self._from_row(row) if row else None
+
+    def get_by_customer_location(
+        self,
+        customer_id: int,
+        location_id: int,
+    ) -> Representative | None:
+        """Retrieve a representative team based on customer location.
+
+        Args:
+            customer_id (int):
+                The ID of the customer associated with the team.
+            location_id (int):
+                The ID of the location of the customer.
+
+        Returns:
+            Representative | None:
+                The Representative associated with the ID if it exists
+                or None if it does not.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(
+                f"{self._select} FROM {self._table} "
+                "WHERE customer_id = %s and location_id = %s",
+                (customer_id, location_id),
+            )
+            row = cursor.fetchone()
+            return self._from_row(row) if row else None
+
+    def get_heating_rep(self, representative_id: int) -> str | None:
+        """Retrieve the heating representative from a representative team.
+
+        Args:
+            representative_id (int):
+                The ID of the representative team.
+
+        Returns:
+            str:
+                The name of the heating representative of the specified team
+                or None if the team or member is not present.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(
+                f"{self._select} FROM {self._table} "
+                "WHERE representative_id = %s",
+                (representative_id,),
+            )
+            row = cursor.fetchone()
+            return self._from_row(row).heating_rep if row else None
+
+    def get_plumbing_rep(self, representative_id: int) -> str | None:
+        """Retrieve the plumbing representative from a representative team.
+
+        Args:
+            representative_id (int):
+                The ID of the representative team.
+
+        Returns:
+            str:
+                The name of the plumbing representative of the specified team
+                or None if the team or member is not present.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(
+                f"{self._select} FROM {self._table} "
+                "WHERE representative_id = %s",
+                (representative_id,),
+            )
+            row = cursor.fetchone()
+            return self._from_row(row).heating_rep if row else None
+
+    def create(self, representative: Representative) -> Representative | None:
+        """Insert a new representative into the database.
+
+        Args:
+            representative (Representative):
+                The representative team to be inserted.
+
+        Returns:
+            Representative | None:
+                The inserted team and its ID or none if it could not be added.
+
+        """
+        with self.connector.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO representatives "
+                    "(customer_id, location_id, team_name, heating_rep, plumbing_rep) "
+                    "VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING "
+                    "RETURNING representative_id",
+                    (
+                        representative.customer_id,
+                        representative.location_id,
+                        representative.team_name,
+                        representative.heating_rep,
+                        representative.plumbing_rep,
+                    ),
+                )
+                representative.representative_id = cursor.fetchone()[0]
+                return representative
+
+    def delete(self, representative_id: int) -> None:
+        """Delete a representative team from the database.
+
+        Args:
+            representative_id (int):
+                The ID of the team to delete.
+
+        """
+        with self.connector.cursor() as cursor:
+                cursor.execute(
+                    "DELETE from representatives "
+                    "WHERE representative_id = %s",
+                    (representative_id,),
+                )
 
 class ReportLineDAO(DAO):
     """To be finished later."""
