@@ -20,7 +20,6 @@ from src.db_connection import (
     Item,
     Location,
     ReportLine,
-    SaleCustomer,
     SalesReport,
 )
 
@@ -162,7 +161,6 @@ class FileHandler:
         except Exception: # noqa: BLE001
             return
 
-        sale_customer_list = []
         customer_location_list = []
         report_line_list = []
 
@@ -201,20 +199,16 @@ class FileHandler:
                 self.cache.locations[(line_data["city"], line_data["state"])] \
                 = location_id
 
-            # save each customer location to a list of CustomerLocation
             customer_location = CustomerLocation(
                 customer_id=customer_id,
                 location_id=location_id,
             )
-            customer_location_list.append(customer_location)
 
-            # save each sale customer to a list of SaleCustomer
-            sale_customer = SaleCustomer(
-                customer_id=customer_id,
-                location_id=location_id,
-                report_id=sales_report.report_id,
-            )
-            sale_customer_list.append(sale_customer)
+            if customer_location not in self.cache.customer_locations:
+                self.dao.customer_locations.create(customer_location)
+                customer_location_list.append(customer_location)
+
+            rep_team_id = self.cache.representatives.get(customer_location)
 
             # insert item
             if line_data["stockcode"] in self.cache.items:
@@ -230,6 +224,8 @@ class FileHandler:
                 ).item_id
                 self.cache.items[line_data["stockcode"]] = item_id
 
+            # Get representative team associated with customer location
+
             # save each line of report to a list of ReportLine
             line = ReportLine(
                 report_line_id=None,
@@ -242,12 +238,11 @@ class FileHandler:
                 transfer = line_data["transfer"],
                 amt = Decimal(line_data["amount"]),
                 sale_date = line_data["saledate"],
+                rep_team = rep_team_id,
             )
             report_line_list.append(line)
 
         # insert data from lists
-        self.dao.customer_locations.create_bulk(customer_location_list)
-        self.dao.sale_customers.create_bulk(sale_customer_list)
         self.dao.report_lines.create_bulk(report_line_list)
 
     def trim_report(self, dataframe: pd.DataFrame) -> pd.DataFrame:

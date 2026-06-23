@@ -22,6 +22,8 @@ EXPORT_COLUMNS = [
     "amt",
     "quantity",
     "transfer",
+    "rep_team",
+    "representative",
 ]
 
 _REPORT_QUERY = """
@@ -38,15 +40,22 @@ _REPORT_QUERY = """
         i.product_description,
         rl.amt,
         rl.quantity,
-        rl.transfer
+        rl.transfer,
+        r.team_name,
+        CASE m.manufacturer_classification
+            WHEN 'heating' THEN r.heating_rep
+            WHEN 'plumbing' THEN r.plumbing_rep
+            ELSE 'N/A'
+        END AS representative
     FROM report_line rl
-    JOIN sales_report sr  ON rl.report_id      = sr.report_id
+    JOIN sales_report sr  ON rl.report_id       = sr.report_id
     JOIN manufacturers m  ON sr.manufacturer_id = m.manufacturer_id
     JOIN customers c      ON rl.customer_id     = c.customer_id
     JOIN locations l      ON rl.location_id     = l.location_id
     JOIN item i           ON rl.item_id         = i.item_id
+    JOIN representatives r ON rl.rep_team       = r.representative_id
     WHERE rl.report_id = %s
-    ORDER BY c.customer_name, l.city, i.stockcode
+    ORDER BY rl.report_line_id
 """
 
 

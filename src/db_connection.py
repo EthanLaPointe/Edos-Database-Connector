@@ -199,14 +199,6 @@ class SalesReportSummary:
     report_year: str
 
 @dataclass
-class SaleCustomer:
-    """Dataclass to hold sale customer information from database."""
-
-    report_id: int
-    customer_id: int
-    location_id: int
-
-@dataclass
 class Representative:
     """Dataclass to hold representative team information."""
 
@@ -231,6 +223,7 @@ class ReportLine:
     amt: Decimal
     transfer: str
     sale_date: str
+    rep_team: int
 
 #------------------------------------------------------------------
 # DAO Classes
@@ -714,7 +707,7 @@ class CustomerLocationDAO(DAO):
     _select = "SELECT customer_id, location_id FROM customer_locations"
 
     def _from_row(self, row: tuple[Any, ...]) -> CustomerLocation:
-        return CustomerLocation(**row)
+        return CustomerLocation(row[0], row[1])
 
     def get(self, customer_id: int, location_id: int) -> CustomerLocation | None:
         """Retrieve a customer location link based on the customer and location IDs.
@@ -740,6 +733,18 @@ class CustomerLocationDAO(DAO):
                 customer_id = row[0],
                 location_id = row[1],
             ) if row else None
+
+    def get_all_as_set(self) -> set[CustomerLocation]:
+        """Retrieve all customer location pairs in the database.
+
+        Returns:
+            set[CustomerLocation]:
+                A set containing all customer location pairs.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(f"{self.select}")
+            return {self._from_row(row) for row in cursor.fetchall()}
 
     def get_locations_for_customer(self, customer_id: int) -> list[CustomerLocation]:
         """Retrieve a list of all customer locations associated with a customer ID.
@@ -833,10 +838,13 @@ class ManufacturerDAO(DAO):
 
     _table = "manufacturers"
     _pk = "manufacturer_id"
-    _select = "SELECT manufacturer_name, manufacturer_id FROM manufacturers"
+    _select = (
+        "SELECT manufacturer_name, manufacturer_id, manufacturer_classification "
+        "FROM manufacturers"
+    )
 
     def _from_row(self, row: tuple[Any, ...]) -> Manufacturer:
-        return Manufacturer(row[1], row[0])
+        return Manufacturer(row[1], row[0], row[2])
 
     def get_by_id(self, manufacturer_id: int) -> Manufacturer | None:
         """Retrieve a manufacturer based on its ID.
@@ -895,7 +903,8 @@ class ManufacturerDAO(DAO):
         """
         with self.connector.cursor() as cursor:
             cursor.execute(
-                "INSERT INTO manufacturers (manufacturer_name) "
+                "INSERT INTO manufacturers "
+                "(manufacturer_name, manufacturer_classification) "
                 "VALUES (%s) RETURNING manufacturer_id",
                 (manufacturer.manufacturer_name,),
             )
@@ -1269,123 +1278,6 @@ class SalesReportDAO(DAO):
             for row in rows
         ]
 
-class SaleCustomerDAO(DAO):
-    """To be finished later."""
-
-    _table = "sale_customer"
-    _pk = "report_id"
-    _select = "SELECT report_id, customer_id, location_id FROM sale_customer"
-
-    def _from_row(self, row: tuple[Any, ...]) -> SaleCustomer:
-        return SaleCustomer(**row)
-
-    def get(
-        self,
-        report_id: int,
-        customer_id: int,
-        location_id: int,
-    ) -> SaleCustomer | None:
-        """Retrieve a SaleCustomer from the database.
-
-        Args:
-            report_id (int):
-                The ID of the report the customer is from.
-            customer_id (int):
-                The ID of the customer.
-            location_id (int):
-                The ID of the location of the customer.
-
-        Returns;
-            SaleCustomer | None:
-                A SaleCustomer object if an associated sales customer exists
-                or None if it does not.
-
-        """
-        with self.connector.cursor() as cursor:
-            cursor.execute(
-                f"{self._select} WHERE report_id = %s AND customer_id = %s "
-                "AND location_id = %s",
-                (report_id, customer_id, location_id),
-            )
-            row = cursor.fetchone()
-            return SaleCustomer(report_id=row[0],
-                                customer_id=row[1],
-                                location_id=row[2],
-                            ) if row else None
-
-    def get_by_report(self, report_id: int) -> list[SaleCustomer]:
-        """Retrieve all SaleCustomers of a report.
-
-        Args:
-            report_id (int):
-                The ID of the report to pull customers from.
-
-        Returns:
-            list[SaleCustomer]:
-                A list of all SaleCustomers within the specified report.
-
-        """
-        with self.connector.cursor() as cursor:
-            cursor.execute(f"{self._select} WHERE report_id = %s", (report_id,))
-        return [SaleCustomer(**row) for row in cursor.fetchall()]
-
-    def create(self, link: SaleCustomer) -> None:
-        """Insert a new SaleCustomer into the database.
-
-        Args:
-            link (SaleCustomer):
-                The SaleCustomer link to be inserted.
-
-        """
-        with self.connector.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO sale_customer (report_id, customer_id, location_id) "
-                "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
-                (link.report_id, link.customer_id, link.location_id),
-            )
-
-    def delete(self, report_id: int, customer_id: int, location_id: int) -> None:
-        """Delete a SaleCustomer link from the database.
-
-        Args:
-            report_id (int):
-                The ID of the report the sale customer is from.
-            customer_id (int):
-                The ID of the customer.
-            location_id (int):
-                The ID of the location of the customer.
-
-        """
-        with self.connector.cursor() as cursor:
-            cursor.execute(
-                "DELETE FROM sale_customer "
-                "WHERE report_id = %s AND customer_id = %s AND location_id = %s",
-                (report_id, customer_id, location_id),
-            )
-
-    def create_bulk(self, lines: list[SaleCustomer]) -> None:
-        """Insert a list of SaleCustomers into the database.
-
-        Args:
-            lines (list[SaleCustomer]):
-                The list of SaleCustomers to be inserted.
-
-        """
-        if not lines:
-            return lines
-
-        values = [(ln.report_id, ln.customer_id, ln.location_id) for ln in lines]
-
-        with self.connector.cursor() as cursor:
-            psycopg2.extras.execute_values(
-                cursor,
-                "INSERT INTO sale_customer (report_id, customer_id, location_id) "
-                "VALUES %s ON CONFLICT DO NOTHING",
-                values,
-                page_size=500,
-            )
-            return None
-
 class RepresentativeDAO(DAO):
     """To be finished later."""
 
@@ -1408,6 +1300,27 @@ class RepresentativeDAO(DAO):
             row[4],
             row[5],
         )
+
+    def get_all_as_dict(self, limit: int = 15_000) -> dict[(int, int), int]:
+        """Retrieve all rep teams and store them as a dict.
+
+        Utilizes internal select statement and primary key to select and order
+        data from the associated table. Returns dictionary for use in joining
+        reference tables or viewing large tables.
+
+        Args:
+            limit(int):
+                The line limit the function should not exceed.
+
+        Returns:
+            dict[(int, int), int]:
+                A dict with the rep team customer location as the key
+                and rep team ID as the value.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(f"{self._select} ORDER BY {self._pk} LIMIT %s", (limit,))
+            return {(x[1], x[2]): x[0] for x in cursor.fetchall()}
 
     def get_by_id(self, representative_id: int) -> Representative | None:
         """Retrieve a representative team based on its ID.
@@ -1551,15 +1464,18 @@ class ReportLineDAO(DAO):
 
     _table = "report_line"
     _pk = "report_line_id"
-    _select = ("SELECT report_line_id, "
+    _select = ("SELECT "
+               "report_line_id, "
                "report_id, "
                "customer_alias, "
-               "customer_id, item_id, "
+               "customer_id, "
+               "item_id, "
                "quantity, "
                "amt, "
                "transfer, "
                "location_id, "
-               "sale_date "
+               "sale_date, "
+               "rep_team "
                "FROM report_line"
             )
 
@@ -1575,6 +1491,7 @@ class ReportLineDAO(DAO):
             row[7],
             row[8],
             row[9],
+            row[10],
         )
 
     def get_by_id(self, report_line_id: int) -> ReportLine | None:
@@ -1677,8 +1594,9 @@ class ReportLineDAO(DAO):
                            "amt, "
                            "transfer, "
                            "location_id, "
-                           "sale_date) "
-                           "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                           "sale_date, "
+                           "rep_team) "
+                           "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
                         (
                             line.report_id,
                             line.customer_id,
@@ -1785,7 +1703,8 @@ class ReportLineDAO(DAO):
                 "amt, "
                 "transfer, "
                 "location_id, "
-                "sale_date) "
+                "sale_date, "
+                "rep_team) "
                 "VALUES %s",
                 values,
                 page_size=500,
@@ -1805,8 +1724,8 @@ class DAOFactory:
         self.manufacturers = ManufacturerDAO(db)
         self.items = ItemDAO(db)
         self.sales_reports = SalesReportDAO(db)
-        self.sale_customers = SaleCustomerDAO(db)
         self.report_lines = ReportLineDAO(db)
+        self.representatives = RepresentativeDAO(db)
 
     def close(self) -> None:
         """Close the database connection of the factory."""
