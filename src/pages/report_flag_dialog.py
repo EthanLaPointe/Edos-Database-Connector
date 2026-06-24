@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import QStringListModel, Qt, Signal
 from PySide6.QtGui import QCloseEvent, QFont
 from PySide6.QtWidgets import (
+    QComboBox,
     QCompleter,
     QDialog,
     QFormLayout,
@@ -69,6 +70,11 @@ RESOLVABLE_CODES: frozenset[int] = frozenset({1, 2, 3})
 ROLE_FILEPATH = Qt.UserRole
 ROLE_CODE     = Qt.UserRole + 1
 
+MANUFACTURER_CLASSIFICATIONS: list[tuple[str, str]] = [
+    ("heating", "Heating"),
+    ("plumbing", "Plumbing"),
+]
+
 class ReportFlagDialog(QDialog):
     """Class for the displaying and handling of flagged reports.
 
@@ -107,12 +113,13 @@ class ReportFlagDialog(QDialog):
         self.code = code
         self.queue_index = queue_index
         self.cache = cache
-        self.cache.refresh()
+        self.cache.refresh_all()
         self._resolution_panel = None
         self._status_lbl = None
         self._badge_lbl = None
         self._desc_lbl = None
         self._mfr_input = None
+        self._mfr_classification_combo: QComboBox | None = None
         self._customer_model: QStringListModel | None = None
         self._alias_inputs: dict[str, QLineEdit] = {}
 
@@ -232,6 +239,7 @@ class ReportFlagDialog(QDialog):
 
         # Reset per-panel state
         self._mfr_input = None
+        self._mfr_classification_combo = None
         self._customer_model = None
         self._alias_inputs = {}
 
@@ -247,18 +255,30 @@ class ReportFlagDialog(QDialog):
 
         info = QLabel(
             f"The manufacturer <b>{raw_name}</b> was not found in the database.\n"
-            "Enter the correct name to add, then retry insertion.",
+            "Enter the correct name to add, "
+            "select classification, then retry insertion.",
         )
         info.setWordWrap(True)
         layout.addWidget(info)
 
-        form = QFormLayout()
-        form.setSpacing(8)
+        name_row = QHBoxLayout()
+        name_row.setSpacing(8)
+
+        # Name entry
         self._mfr_input = QLineEdit()
         self._mfr_input.setPlaceholderText("Exact manufacturer name...")
-        self._mfr_input.setText(raw_name if raw_name != "-" else "")
-        form.addRow("Manufacturer name:", self._mfr_input)
-        layout.addLayout(form)
+        self._mfr_input.setText(raw_name)
+        name_row.addWidget(self._mfr_input, stretch=1)
+
+        # Classification Dropdown
+        self._mfr_classification_combo = QComboBox()
+        for value, label in MANUFACTURER_CLASSIFICATIONS:
+            self._mfr_classification_combo.addItem(label, userData=value)
+        self._mfr_classification_combo.setMinimumHeight(38)
+        self._mfr_classification_combo.setFixedWidth(130)
+        name_row.addWidget(self._mfr_classification_combo)
+
+        layout.addLayout(name_row)
 
         add_btn = QPushButton("Add Manufacturer && Retry")
         add_btn.setCursor(Qt.PointingHandCursor)
@@ -272,12 +292,17 @@ class ReportFlagDialog(QDialog):
         connector.connect()
         _factory = DAOFactory(connector)
         name = self._mfr_input.text().strip().lower()
+        classification = str(self._mfr_classification_combo.currentData()).lower()
         if not name:
             self._show_status("Please enter a manufacturer name.", error=True)
             return
         try:
             manufacturer = _factory.manufacturers.create(
-                Manufacturer(manufacturer_id=None, manufacturer_name=name),
+                Manufacturer(
+                    manufacturer_id=None,
+                    manufacturer_name=name,
+                    manufacturer_classification=classification,
+                ),
             )
             if (
                 manufacturer.manufacturer_name
@@ -286,8 +311,8 @@ class ReportFlagDialog(QDialog):
                 key = manufacturer.manufacturer_name
                 self.cache.manufacturers[key] = manufacturer.manufacturer_id
                 self._retry_insert()
-        except Exception as e:  # noqa: BLE001
-            self._show_status(f"Error adding manufacturer: {e}", error=True)
+        except Exception:  # noqa: BLE001
+            self._show_status(traceback.format_exc(), error=True)
         finally:
             connector.close()
 

@@ -905,8 +905,11 @@ class ManufacturerDAO(DAO):
             cursor.execute(
                 "INSERT INTO manufacturers "
                 "(manufacturer_name, manufacturer_classification) "
-                "VALUES (%s) RETURNING manufacturer_id",
-                (manufacturer.manufacturer_name,),
+                "VALUES (%s, %s::classification) RETURNING manufacturer_id",
+                (
+                    manufacturer.manufacturer_name,
+                    manufacturer.manufacturer_classification,
+                ),
             )
             manufacturer.manufacturer_id = cursor.fetchone()[0]
         return manufacturer
@@ -1283,12 +1286,13 @@ class RepresentativeDAO(DAO):
 
     _table = "representatives"
     _pk = "representative_id"
-    _select = ("Select representative_id, "
+    _select = ("SELECT representative_id, "
                "customer_id, "
                "location_id, "
                "team_name, "
                "heating_rep, "
-               "plumbing_rep, "
+               "plumbing_rep "
+               "FROM representatives "
             )
 
     def _from_row(self, row: tuple[Any, ...]) -> Representative:
