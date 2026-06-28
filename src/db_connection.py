@@ -202,12 +202,31 @@ class SalesReportSummary:
 class Representative:
     """Dataclass to hold representative team information."""
 
-    representative_id: int
+    representative_id: int | None
+    representative_name: str
+
+@dataclass
+class RepresentativeTeam:
+    """Dataclass to hold rep team information."""
+
+    team_id: int | None
+    team_name: str
+
+@dataclass
+class RepTeamCustomerLocation:
+    """Dataclass to hold customer locations per rep team."""
+
+    team_id: int
     customer_id: int
     location_id: int
-    team_name: str
-    heating_rep: str
-    plumbing_rep: str
+
+@dataclass
+class TeamMember:
+    """Dataclass to hold team member information."""
+
+    team_id: int
+    representative_id: int
+    rep_classification: str
 
 @dataclass
 class ReportLine:
@@ -1287,23 +1306,12 @@ class RepresentativeDAO(DAO):
     _table = "representatives"
     _pk = "representative_id"
     _select = ("SELECT representative_id, "
-               "customer_id, "
-               "location_id, "
-               "team_name, "
-               "heating_rep, "
-               "plumbing_rep "
+               "representative_name "
                "FROM representatives "
             )
 
     def _from_row(self, row: tuple[Any, ...]) -> Representative:
-        return Representative(
-            row[0],
-            row[1],
-            row[2],
-            row[3],
-            row[4],
-            row[5],
-        )
+        return Representative(row[0], row[1])
 
     def get_all_as_dict(self, limit: int = 15_000) -> dict[(int, int), int]:
         """Retrieve all rep teams and store them as a dict.
@@ -1324,7 +1332,7 @@ class RepresentativeDAO(DAO):
         """
         with self.connector.cursor() as cursor:
             cursor.execute(f"{self._select} ORDER BY {self._pk} LIMIT %s", (limit,))
-            return {(x[1], x[2]): x[0] for x in cursor.fetchall()}
+            return {x[0]: x[1] for x in cursor.fetchall()}
 
     def get_by_id(self, representative_id: int) -> Representative | None:
         """Retrieve a representative team based on its ID.
@@ -1341,108 +1349,32 @@ class RepresentativeDAO(DAO):
         """
         with self.connector.cursor() as cursor:
             cursor.execute(
-                f"{self._select} FROM {self._table} WHERE representative_id = %s",
+                f"{self._select} WHERE representative_id = %s",
                 (representative_id,),
             )
             row = cursor.fetchone()
             return self._from_row(row) if row else None
-
-    def get_by_customer_location(
-        self,
-        customer_id: int,
-        location_id: int,
-    ) -> Representative | None:
-        """Retrieve a representative team based on customer location.
-
-        Args:
-            customer_id (int):
-                The ID of the customer associated with the team.
-            location_id (int):
-                The ID of the location of the customer.
-
-        Returns:
-            Representative | None:
-                The Representative associated with the ID if it exists
-                or None if it does not.
-
-        """
-        with self.connector.cursor() as cursor:
-            cursor.execute(
-                f"{self._select} FROM {self._table} "
-                "WHERE customer_id = %s and location_id = %s",
-                (customer_id, location_id),
-            )
-            row = cursor.fetchone()
-            return self._from_row(row) if row else None
-
-    def get_heating_rep(self, representative_id: int) -> str | None:
-        """Retrieve the heating representative from a representative team.
-
-        Args:
-            representative_id (int):
-                The ID of the representative team.
-
-        Returns:
-            str:
-                The name of the heating representative of the specified team
-                or None if the team or member is not present.
-
-        """
-        with self.connector.cursor() as cursor:
-            cursor.execute(
-                f"{self._select} FROM {self._table} "
-                "WHERE representative_id = %s",
-                (representative_id,),
-            )
-            row = cursor.fetchone()
-            return self._from_row(row).heating_rep if row else None
-
-    def get_plumbing_rep(self, representative_id: int) -> str | None:
-        """Retrieve the plumbing representative from a representative team.
-
-        Args:
-            representative_id (int):
-                The ID of the representative team.
-
-        Returns:
-            str:
-                The name of the plumbing representative of the specified team
-                or None if the team or member is not present.
-
-        """
-        with self.connector.cursor() as cursor:
-            cursor.execute(
-                f"{self._select} FROM {self._table} "
-                "WHERE representative_id = %s",
-                (representative_id,),
-            )
-            row = cursor.fetchone()
-            return self._from_row(row).heating_rep if row else None
 
     def create(self, representative: Representative) -> Representative | None:
         """Insert a new representative into the database.
 
         Args:
             representative (Representative):
-                The representative team to be inserted.
+                The representative to be inserted.
 
         Returns:
             Representative | None:
-                The inserted team and its ID or none if it could not be added.
+                The inserted rep and its ID or none if it could not be added.
 
         """
         with self.connector.cursor() as cursor:
                 cursor.execute(
                     "INSERT INTO representatives "
-                    "(customer_id, location_id, team_name, heating_rep, plumbing_rep) "
-                    "VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING "
+                    "(representative_name) "
+                    "VALUES (%s) ON CONFLICT DO NOTHING "
                     "RETURNING representative_id",
                     (
-                        representative.customer_id,
-                        representative.location_id,
-                        representative.team_name,
-                        representative.heating_rep,
-                        representative.plumbing_rep,
+                        representative.representative_name
                     ),
                 )
                 representative.representative_id = cursor.fetchone()[0]
@@ -1453,7 +1385,7 @@ class RepresentativeDAO(DAO):
 
         Args:
             representative_id (int):
-                The ID of the team to delete.
+                The ID of the representative to delete.
 
         """
         with self.connector.cursor() as cursor:
@@ -1462,6 +1394,109 @@ class RepresentativeDAO(DAO):
                     "WHERE representative_id = %s",
                     (representative_id,),
                 )
+
+class RepresentativeTeamsDAO(DAO):
+    """To be finished later."""
+
+    _table = "representative_teams"
+    _pk = "team_id"
+    _select = ("SELECT "
+               "team_id, "
+               "team_name "
+               "FROM representative_teams"
+               )
+
+    def _from_row(self, row: tuple[Any, ...]) -> RepresentativeTeam:
+        return RepresentativeTeam(
+            row[0],
+            row[1],
+        )
+
+    def get_by_id(self, team_id: int) -> RepresentativeTeam | None:
+        """Retrieve a rep team based on its ID.
+
+        Args:
+            team_id (int):
+                The ID of the team to retrieve.
+
+        Returns:
+            RepresentativeTeam | None:
+                The team associated with the ID if it exists
+                or None if it does not.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(
+                f"{self._select} WHERE team_id = %s",
+                (team_id,),
+            )
+            row = cursor.fetchone()
+            return self._from_row(row) if row else None
+
+    def get_by_name(self, team_name: str) -> RepresentativeTeam | None:
+        """Retrieve a rep team based on its name.
+
+        Args:
+            team_name (str):
+                The name of the team to retrieve.
+
+        Returns:
+            RepresentativeTeam | None:
+                The team with the specified name if it exists
+                or None if it does not.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(
+                f"{self._select} WHERE team_name = %s",
+                (team_name,),
+            )
+            row = cursor.fetchone()
+            return self._from_row(row) if row else None
+
+    def create(self, team: RepresentativeTeam) -> RepresentativeTeam | None:
+        """Insert a new representative team into the database.
+
+        Args:
+            team (RepresentativeTeam):
+                The team to be inserted.
+
+        Returns:
+            RepresentativeTeam | None:
+                A RepresentativeTeam containing the ID of the newly created team
+                or None if creation failed.
+
+        """
+        with self.connector.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO representative_teams "
+                    "(team_name) "
+                    "VALUES (%s) ON CONFLICT DO NOTHING "
+                    "RETURNING representative_id",
+                    (
+                        team.team_name
+                    ),
+                )
+                _id = cursor.fetchone
+                if _id:
+                    team.team_id = _id
+                    return team
+                return None
+
+    def delete(self, team_id: int) -> None:
+        """Delete a rep team from the database.
+
+        Args:
+            team_id (int):
+                The ID of the team to delete.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM representative_teams "
+                "WHERE team_id = %s",
+                (team_id,),
+            )
 
 class ReportLineDAO(DAO):
     """To be finished later."""
