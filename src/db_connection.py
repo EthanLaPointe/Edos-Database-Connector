@@ -5,6 +5,7 @@ import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
 from decimal import Decimal
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -243,6 +244,13 @@ class ReportLine:
     transfer: str
     sale_date: str
     rep_team: int
+
+# Classification Enum
+class Classification(StrEnum):
+    """Enum class for use with db classification type."""
+
+    HEATING = "heating"
+    PLUMBING = "plumbing"
 
 #------------------------------------------------------------------
 # DAO Classes
@@ -1498,25 +1506,218 @@ class RepresentativeTeamsDAO(DAO):
                 (team_id,),
             )
 
+class RepTeamCustomerLocationDAO(DAO):
+    """To be finished later."""
+
+    _table = "rep_team_customer_locations"
+    _pk = "(customer_id, location_id)"
+    _select = (
+        "SELECT "
+        "team_id, "
+        "customer_id, "
+        "location_id, "
+        "FROM rep_team_customer_locations"
+    )
+
+    def _from_row(self, row: tuple[Any, ...]) -> ReportLine:
+        return RepTeamCustomerLocation(
+            row[0],
+            row[1],
+            row[2],
+        )
+
+    def get_by_customer_location(
+        self,
+        customer_location: CustomerLocation,
+    )-> RepTeamCustomerLocation | None:
+        """Retrieve a rep_team based on its customer location.
+
+        Args:
+            customer_location (CustomerLocation):
+                The customer location associated with the team.
+
+        Returns:
+            RepTeamCustomerLocation | None:
+                A RepTeamCustomerLocation object containing the team ID,
+                customer_id, and location_id, if a team exists for the
+                customer location pair. If a team does not exist then None.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(
+                f"{self._select}"
+                "WHERE customer_id = %s "
+                "AND location_id = %s ",
+                (customer_location.customer_id, customer_location.location_id),
+            )
+            row = cursor.fetchall()
+            return self._from_row(row) if row else None
+
+    def get_locations_for_team(self, team_id: int) -> list[CustomerLocation] | None:
+        """Retrieve all customer locations associated with the specified team.
+
+        Args:
+            team_id (int):
+                The ID of the team to pull locations for.
+
+        Returns:
+            list[CustomerLocation] | None:
+                A list of all customer locations associated with the team ID
+                or None if no locations are found.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(
+                f"{self._select}"
+                "WHERE team_id = %s "
+                (team_id,),
+            )
+            return {self._from_row(x) for x in cursor.fetchall()}
+
+    def delete(self, customer_location: CustomerLocation) -> None:
+        """Delete a rep team customer location from the database.
+
+        Args:
+            customer_location (CustomerLocation):
+                The location of the rep team relation to delete.
+
+        """
+
+    def create(self, rtcl: RepTeamCustomerLocation) -> None:
+        """Insert a new customer location rep team relationship.
+
+        Args:
+            rtcl (RepTeamCustomerLocation):
+                The customer location and team ID to be added.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO rep_team_customer_locations "
+                "(team_id, customer_id, location_id) "
+                "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING"
+                (rtcl.team_id, rtcl.customer_id, rtcl.location_id),
+            )
+
+class TeamMembers(DAO):
+    """To be finished later."""
+
+    _table = "team_members"
+    _pk = "(team_id, rep_classification)"
+    _select = (
+        "SELECT "
+        "team_id, "
+        "representative_id, "
+        "rep_classification "
+        "FROM team_members"
+    )
+
+    def _from_row(self, row: tuple[Any, ...]) -> TeamMember:
+        return TeamMember(row[0], row[1], row[2])
+
+    def get_by_team(self, team_id: int) -> list[TeamMember]:
+        """Retrieve all members of a specific rep team.
+
+        Args:
+            team_id (int):
+                The ID of the team to get the members of.
+
+        Returns:
+            list[TeamMember]:
+                A list containing all team members of the specified team.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(
+                f"{self._select} WHERE team_id = %s",
+                (team_id,),
+            )
+            return {self._from_row(row) for row in cursor.fetchall()}
+
+    def get_by_classification(
+        self,
+        team_id: int,
+        classification: Classification,
+    ) -> TeamMember | None:
+        """Retrieve a member of a team based on classification.
+
+        Args:
+            team_id (int):
+                The ID of the team of the representative
+            classification (Classification):
+                The classification of the representative to retrieve.
+
+        Returns:
+            TeamMember | None:
+                The team member of the specified team and classification
+                if it exists or None if it does not.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(
+                f"{self._select} WHERE team_id = %s AND classification = %s",
+                (team_id, classification),
+            )
+            row = cursor.fetchone()
+            return self._from_row(row) if row else None
+
+    def delete(self, team_id: int, classification: Classification) -> None:
+        """Delete a team member from the database.
+
+        Args:
+            team_id (int):
+                ID of the team the representative is associated with.
+            classification (Classification):
+                The classification of the representative to delete.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM team_members "
+                "WHERE team_id = %s AND classification = %s",
+                (team_id, classification),
+            )
+
+    def create(self, team_id: int, rep_id: int, classification: Classification) -> None:
+        """Create a new team member relationship.
+
+        Args:
+            team_id (int):
+                The ID of the team to add the representative to.
+            rep_id (int):
+                The ID of the representative to add.
+            classification (Classification):
+                The classification of the representative to add.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO team_members "
+                "(team_id, representative_id, rep_classification) "
+                "VALUES (%s, %s, %s)",
+                (team_id, rep_id, classification),
+            )
+
 class ReportLineDAO(DAO):
     """To be finished later."""
 
     _table = "report_line"
     _pk = "report_line_id"
-    _select = ("SELECT "
-               "report_line_id, "
-               "report_id, "
-               "customer_alias, "
-               "customer_id, "
-               "item_id, "
-               "quantity, "
-               "amt, "
-               "transfer, "
-               "location_id, "
-               "sale_date, "
-               "rep_team "
-               "FROM report_line"
-            )
+    _select = (
+        "SELECT "
+        "report_line_id, "
+        "report_id, "
+        "customer_alias, "
+        "customer_id, "
+        "item_id, "
+        "quantity, "
+        "amt, "
+        "transfer, "
+        "location_id, "
+        "sale_date, "
+        "rep_team "
+        "FROM report_line"
+    )
 
     def _from_row(self, row: tuple[Any, ...]) -> ReportLine:
         return ReportLine(
