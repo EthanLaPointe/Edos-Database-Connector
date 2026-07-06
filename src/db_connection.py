@@ -698,6 +698,28 @@ class LocationDAO(DAO):
             location.location_id = cursor.fetchone()[0]
         return location
 
+    def create_bulk(self, lines: list[Location]) -> None:
+        """Insert a list of locations into the database.
+
+        Args:
+            lines (list[Location]):
+                The list of locations to be inserted.
+
+        """
+        if not lines:
+            return
+
+        values = [(ln.city, ln.state) for ln in lines]
+
+        with self.connector.cursor() as cursor:
+            psycopg2.extras.execute_values(
+                cursor,
+                "INSERT INTO locations (city, state) "
+                "VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                values,
+                page_size=500,
+            )
+
     def update(self, location: Location) -> None:
         """Update a location's city and state in the database.
 
@@ -837,7 +859,7 @@ class CustomerLocationDAO(DAO):
             psycopg2.extras.execute_values(
                 cursor,
                 "INSERT INTO customer_locations (customer_id, location_id) "
-                "VALUES %s ON CONFLICT DO NOTHING",
+                "VALUES (%s, %s) ON CONFLICT DO NOTHING",
                 values,
                 page_size=500,
             )
@@ -1388,6 +1410,29 @@ class RepresentativeDAO(DAO):
                 representative.representative_id = cursor.fetchone()[0]
                 return representative
 
+    def create_bulk(self, lines: list[Representative]) -> None:
+        """Insert a list of representatives into the database.
+
+        Args:
+            lines (list[Representative]):
+                The list of representatives to be inserted.
+
+        """
+        if not lines:
+            return lines
+
+        values = [(ln.representative_name,) for ln in lines]
+
+        with self.connector.cursor() as cursor:
+            psycopg2.extras.execute_values(
+                cursor,
+                "INSERT INTO representatives (representative_name) "
+                "VALUES %s ON CONFLICT DO NOTHING",
+                values,
+                page_size=500,
+            )
+            return None
+
     def delete(self, representative_id: int) -> None:
         """Delete a representative team from the database.
 
@@ -1491,6 +1536,29 @@ class RepresentativeTeamsDAO(DAO):
                     return team
                 return None
 
+    def create_bulk(self, lines: list[RepresentativeTeam]) -> None:
+        """Insert a list of representative teams into the database.
+
+        Args:
+            lines (list[RepresentativeTeam]):
+                The list of teams to be inserted.
+
+        """
+        if not lines:
+            return lines
+
+        values = [(ln.team_name,) for ln in lines]
+
+        with self.connector.cursor() as cursor:
+            psycopg2.extras.execute_values(
+                cursor,
+                "INSERT INTO representative_teams (team_name) "
+                "VALUES %s ON CONFLICT DO NOTHING",
+                values,
+                page_size=500,
+            )
+            return None
+
     def delete(self, team_id: int) -> None:
         """Delete a rep team from the database.
 
@@ -1569,7 +1637,7 @@ class RepTeamCustomerLocationDAO(DAO):
         with self.connector.cursor() as cursor:
             cursor.execute(
                 f"{self._select}"
-                "WHERE team_id = %s "
+                "WHERE team_id = %s ",
                 (team_id,),
             )
             return {self._from_row(x) for x in cursor.fetchall()}
@@ -1595,11 +1663,11 @@ class RepTeamCustomerLocationDAO(DAO):
             cursor.execute(
                 "INSERT INTO rep_team_customer_locations "
                 "(team_id, customer_id, location_id) "
-                "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING"
+                "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
                 (rtcl.team_id, rtcl.customer_id, rtcl.location_id),
             )
 
-class TeamMembers(DAO):
+class TeamMemberDAO(DAO):
     """To be finished later."""
 
     _table = "team_members"
@@ -1966,6 +2034,9 @@ class DAOFactory:
         self.sales_reports = SalesReportDAO(db)
         self.report_lines = ReportLineDAO(db)
         self.representatives = RepresentativeDAO(db)
+        self.rep_teams = RepresentativeTeamsDAO(db)
+        self.rtcl = RepTeamCustomerLocationDAO(db)
+        self.team_members = TeamMemberDAO(db)
 
     def close(self) -> None:
         """Close the database connection of the factory."""

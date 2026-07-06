@@ -14,13 +14,17 @@ import pandas as pd
 from report import Report
 from src.data_cache import DataCache
 from src.db_connection import (
+    Customer,
     CustomerAlias,
     CustomerLocation,
     DAOFactory,
     Item,
     Location,
     ReportLine,
+    Representative,
+    RepresentativeTeam,
     SalesReport,
+    TeamMember,
 )
 
 # List of fields a report must contain
@@ -93,6 +97,16 @@ MAPPING_FIELD_LIST = [
 _MAPPING_FIELD_ALIAS = [
     "customer_name",
     "parent",
+]
+
+REP_MAPPING_FIELD_LIST = [
+    "name",
+    "superparent",
+    "city",
+    "state",
+    "new team",
+    "heating",
+    "plumbing",
 ]
 
 # Status codes for individual mappings
@@ -441,7 +455,7 @@ class FileHandler:
         return (valid_manufacturer, already_present), unknown_list
 
     def read_mappings(self, file_path: str) -> pd.DataFrame:
-        """Read a .csv file of customer alias mappings.
+        """Read a .csv file of mappings (Aliases or representatives).
 
         Args:
             file_path (str):
@@ -454,7 +468,7 @@ class FileHandler:
         file_path = Path(file_path)
         return pd.read_csv(file_path, encoding="latin-1").astype(str)
 
-    def check_mappings(self, dataframe: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
+    def check_alias_mappings(self, dataframe: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
         """Check the validity of a customer alias mapping.
 
         Args:
@@ -565,6 +579,123 @@ class FileHandler:
 
         return self.dao.customer_aliases.create_bulk(mappings_to_insert)
 
+    def check_rep_mappings(self, dataframe: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
+        """Check the validity of a representative mapping file and clean it.
+
+        Args:
+            dataframe (Pandas.DataFrame):
+                The dataframe of the representative mappings.
+
+        Returns:
+            tuple[Pandas.DataFrame, bool]:
+                The cleaned dataframe and a bool for whether it is a valid
+                representative mapping or not.
+
+        """
+        valid_columns = False
+        column_list = [x.lower() for x in dataframe.columns.tolist()]
+
+        fields_to_keep = []
+
+
+        # Locate desired columns
+        for field in REP_MAPPING_FIELD_LIST:
+            for idx, col in enumerate(column_list):
+                if col == field:
+                    fields_to_keep.append(idx)
+                    break
+
+        # Trim DF to only contain desired columns
+        dataframe = dataframe.iloc[:, fields_to_keep]
+        dataframe = dataframe.dropna()
+        column_list = [x.lower() for x in dataframe.columns.tolist()]
+
+        if column_list == REP_MAPPING_FIELD_LIST:
+            valid_columns = True
+
+        # Filter names in name and superparent columns to match report filtering
+        dataframe = dataframe.apply(
+            lambda col: col.str.lower()
+            if pd.api.types.is_string_dtype(col) else col,
+        )
+        dataframe["superparent"] = dataframe["superparent"].astype(str).str.replace(
+            r"[.'(),-]",
+            "",
+            regex=True,
+        ).str.replace(
+            r" +",
+            " ",
+            regex=True,
+        ).str.strip()
+        dataframe["name"] = dataframe["name"].astype(str).str.replace(
+            r"[.'(),-]",
+            "",
+            regex=True,
+        ).str.replace(
+            r" +",
+            " ",
+            regex=True,
+        ).str.strip()
+
+        return (dataframe, valid_columns)
+
+    def insert_rep_mappings(self, dataframe: pd.DataFrame) -> bool:
+        """Insert representative teams into the database.
+
+        Args:
+            dataframe (Pandas.DataFrame):
+                The validated dataframe containing representative relationships.
+
+        Returns:
+            bool:
+                True if insert was successful or False if it failed.
+
+        """
+        # Insert all teams
+        # Add team members to each team
+        # Link customer locations and teams
+
+        # Get all customers and insert them.
+        customer_list = [
+            Customer(customer_id=None, customer_name=name)
+            for name in dataframe["superparent"]
+        ]
+        self.dao.customers.create_bulk(customer_list)
+        self.cache.refresh_customer_aliases()
+
+        # Get all aliases and locations and insert them
+        alias_list = []
+        location_list = []
+        rep_teams = set()
+
+        for row in dataframe.itertuples(index=False):
+            alias_list.append(
+                CustomerAlias(alias=row[0], customer_id=self.cache.customers[row[1]]),
+            )
+            location_list.append(Location(city=row[2], state=row[3]))
+            rep_teams.add(RepresentativeTeam(team_name=row[4]))
+
+        self.dao.customer_aliases.create_bulk(alias_list)
+        self.dao.locations.create_bulk(location_list)
+
+        self.cache.refresh_locations()
+        self.cache.refresh_customer_aliases()
+
+        # Get all customer locations and insert them
+        cl_list = [
+            CustomerLocation(
+                customer_id=self.cache.customers[row[1]],
+                location_id=self.cache.locations[(row[2], row[3])],
+            )
+            for row in dataframe.itertuples(index=False)
+        ]
+
+        self.dao.customer_locations.create_bulk(cl_list)
+        self.cache.refresh_customer_locations()
+
+        
+
+        self.dao.rep_teams.create_bulk(rep_teams)
 
 
 

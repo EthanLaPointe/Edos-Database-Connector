@@ -288,11 +288,11 @@ class AliasWorker(QThread):
 
     def _read_and_check(self, handler: FileHandler) -> None:
         self.mappings = handler.read_mappings(self._path)
-        self.mappings, valid = handler.check_mappings(self.mappings)
+        self.mappings, valid = handler.check_alias_mappings(self.mappings)
         self.check_done.emit(self.mappings, valid)
 
     def _check(self, handler: FileHandler) -> None:
-        self.mappings, valid = handler.check_mappings(self.mappings)
+        self.mappings, valid = handler.check_alias_mappings(self.mappings)
         self.check_done.emit(self.mappings, valid)
 
     def _insert_unknown(self, factory: DAOFactory) -> None:
