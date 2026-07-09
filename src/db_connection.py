@@ -1790,6 +1790,37 @@ class TeamMemberDAO(DAO):
                 (team_id, rep_id, classification),
             )
 
+    def create_bulk(self, lines: list[TeamMember]) -> None:
+        """Insert a list of team members into the database.
+
+        Args:
+            lines (list[TeamMember]):
+                The list of team members to be inserted.
+
+        """
+        if not lines:
+            return lines
+
+        values = [
+            (
+                ln.team_id,
+                ln.representative_id,
+                ln.rep_classification,
+            )
+            for ln in lines
+        ]
+
+        with self.connector.cursor() as cursor:
+            psycopg2.extras.execute_values(
+                cursor,
+                "INSERT INTO rep_team_customer_locations "
+                "(team_id, customer_id, location_id) "
+                "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
+                values,
+                page_size=500,
+            )
+            return None
+
 class ReportLineDAO(DAO):
     """To be finished later."""
 

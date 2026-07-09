@@ -14,6 +14,7 @@ import pandas as pd
 from report import Report
 from src.data_cache import DataCache
 from src.db_connection import (
+    Classification,
     Customer,
     CustomerAlias,
     CustomerLocation,
@@ -26,7 +27,6 @@ from src.db_connection import (
     RepTeamCustomerLocation,
     SalesReport,
     TeamMember,
-    Classification,
 )
 
 # List of fields a report must contain
@@ -470,7 +470,10 @@ class FileHandler:
         file_path = Path(file_path)
         return pd.read_csv(file_path, encoding="latin-1").astype(str)
 
-    def check_alias_mappings(self, dataframe: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
+    def check_alias_mappings(
+        self,
+        dataframe: pd.DataFrame,
+    ) -> tuple[pd.DataFrame, bool]:
         """Check the validity of a customer alias mapping.
 
         Args:
@@ -696,9 +699,10 @@ class FileHandler:
         self.dao.customer_locations.create_bulk(cl_list)
         self.cache.refresh_customer_locations()
 
+        # Get all rep team locations, representatives, and team members
         rtcl_list = []
         reps = []
-        team_members = []
+        tmp_members = []
         for row in dataframe.itertuples(index=False):
             customer_id = self.cache.customers[row[1]]
             location_id = self.cache.locations[(row[2], row[3])]
@@ -711,22 +715,35 @@ class FileHandler:
             rtcl_list.append(rtcl)
             if row[5]:
                 reps.append(Representative(row[5]))
-                team_members.append((row[5], team_id, Classification.HEATING))
+                tmp_members.append((row[5], team_id, Classification.HEATING))
             if row[6]:
                 reps.append(Representative(row[6]))
-                team_members.append((row[6], team_id, Classification.PLUMBING))
+                tmp_members.append((row[6], team_id, Classification.PLUMBING))
 
+        # Insert rep team locations and representatives
         self.dao.rtcl.create_bulk(rtcl_list)
         self.dao.representatives.create_bulk(reps)
 
         self.cache.refresh_representatives()
 
-        for member in team_members:
-            self.dao.team_members.create(
-                member[1],
-                self.cache.representatives[member[0]],
-                member[2],
+        team_members = []
+
+        # Pull rep IDs by name to create team_member list for insertion
+        for member in tmp_members:
+            rep_name = member[0]
+            team_id = member[1]
+            rep_class = member[2]
+            rep_id = self.cache.representatives[rep_name]
+
+            team_members.append(
+                TeamMember(
+                    team_id=team_id,
+                    representative_id=rep_id,
+                    rep_classification=rep_class,
+                ),
             )
+
+        self.dao.team_members.create_bulk(team_members)
 
 
 
