@@ -23,8 +23,10 @@ from src.db_connection import (
     ReportLine,
     Representative,
     RepresentativeTeam,
+    RepTeamCustomerLocation,
     SalesReport,
     TeamMember,
+    Classification,
 )
 
 # List of fields a report must contain
@@ -677,6 +679,7 @@ class FileHandler:
 
         self.dao.customer_aliases.create_bulk(alias_list)
         self.dao.locations.create_bulk(location_list)
+        self.dao.rep_teams.create_bulk(rep_teams)
 
         self.cache.refresh_locations()
         self.cache.refresh_customer_aliases()
@@ -693,9 +696,37 @@ class FileHandler:
         self.dao.customer_locations.create_bulk(cl_list)
         self.cache.refresh_customer_locations()
 
-        
+        rtcl_list = []
+        reps = []
+        team_members = []
+        for row in dataframe.itertuples(index=False):
+            customer_id = self.cache.customers[row[1]]
+            location_id = self.cache.locations[(row[2], row[3])]
+            team_id = self.cache.rep_teams[row[4]]
+            rtcl = RepTeamCustomerLocation(
+                team_id=team_id,
+                customer_id=customer_id,
+                location_id=location_id,
+            )
+            rtcl_list.append(rtcl)
+            if row[5]:
+                reps.append(Representative(row[5]))
+                team_members.append((row[5], team_id, Classification.HEATING))
+            if row[6]:
+                reps.append(Representative(row[6]))
+                team_members.append((row[6], team_id, Classification.PLUMBING))
 
-        self.dao.rep_teams.create_bulk(rep_teams)
+        self.dao.rtcl.create_bulk(rtcl_list)
+        self.dao.representatives.create_bulk(reps)
+
+        self.cache.refresh_representatives()
+
+        for member in team_members:
+            self.dao.team_members.create(
+                member[1],
+                self.cache.representatives[member[0]],
+                member[2],
+            )
 
 
 

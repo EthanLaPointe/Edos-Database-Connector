@@ -21,6 +21,7 @@ class DataCache:
         self.items: dict = {}
         self.manufacturers: dict = {}
         self.representatives: dict = {}
+        self.rep_teams: dict = {}
         self.refresh_all()
 
     def refresh_all(self) -> None:
@@ -67,3 +68,7 @@ class DataCache:
     def refresh_representatives(self) -> None:
         """Refresh representative dict."""
         self.representatives = self._factory.representatives.get_all_as_dict()
+
+    def refresh_rep_teams(self) -> None:
+        """Refresh rep teams dict."""
+        self.representative_teams = self._factory.rep_teams.get_all_as_dict()
