@@ -744,6 +744,7 @@ class FileHandler:
             )
 
         self.dao.team_members.create_bulk(team_members)
+        return True
 
 
 
