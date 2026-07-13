@@ -49,6 +49,7 @@ class Sidebar(QFrame):
             ("Dashboard", "home", controller.show_home),
             ("Insert Report", "report", controller.show_report),
             ("Alias Mapping", "alias", controller.show_alias),
+            ("Representative Mapping", "rep", controller.show_rep),
         ]
 
         for label, key, action in nav_items:

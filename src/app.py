@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QMainWindow, QStackedWidget, QWidget
 from pages.alias_page import AliasPage
 from pages.home_page import HomePage
 from pages.login_page import LoginPage
+from pages.rep_page import RepPage
 from pages.report_page import ReportPage
 from src.data_cache import DataCache
 from src.db_connection import (
@@ -51,12 +52,14 @@ class App(QMainWindow):
         self.home_page = HomePage(controller=self)
         self.report_page = ReportPage(controller=self)
         self.alias_page = AliasPage(controller=self)
+        self.rep_page = RepPage(controller=self)
 
         for page in (
             self.login_page,
             self.home_page,
             self.report_page,
             self.alias_page,
+            self.rep_page,
         ):
             self.stack.addWidget(page)
 
@@ -119,3 +122,6 @@ class App(QMainWindow):
 
     def show_alias(self) -> None:  # noqa: D102
         self.show_page(self.alias_page)
+
+    def show_rep(self) -> None:  # noqa: D102
+        self.show_page(self.rep_page)

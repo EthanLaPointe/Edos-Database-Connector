@@ -135,21 +135,21 @@ class DBConnector:
 # Dataclasses representing each table in database
 #------------------------------------------------------------------
 
-@dataclass
+@dataclass(frozen=True)
 class Customer:
     """Dataclass to hold customer information from database."""
 
     customer_id: int | None
     customer_name: str
 
-@dataclass
+@dataclass(frozen=True)
 class  CustomerAlias:
     """Dataclass to hold customer alias information from database."""
 
     alias: str
     customer_id: int
 
-@dataclass
+@dataclass(frozen=True)
 class Location:
     """Dataclass to hold location information from database."""
 
@@ -157,14 +157,14 @@ class Location:
     city: str
     state: str
 
-@dataclass
+@dataclass(frozen=True)
 class CustomerLocation:
     """Dataclass to hold customer location information from database."""
 
     customer_id: int
     location_id: int
 
-@dataclass
+@dataclass(frozen=True)
 class Manufacturer:
     """Dataclass to hold manufacturer information from database."""
 
@@ -172,7 +172,7 @@ class Manufacturer:
     manufacturer_name: str
     manufacturer_classification: str
 
-@dataclass
+@dataclass(frozen=True)
 class Item:
     """Dataclass to hold item information from database."""
 
@@ -181,7 +181,7 @@ class Item:
     product_family: str
     product_description: str
 
-@dataclass
+@dataclass(frozen=True)
 class SalesReport:
     """Dataclass to hold sales report information from database."""
 
@@ -190,7 +190,7 @@ class SalesReport:
     report_year: str
     report_month: str
 
-@dataclass
+@dataclass(frozen=True)
 class SalesReportSummary:
     """Dataclass for report list display."""
 
@@ -199,21 +199,21 @@ class SalesReportSummary:
     report_month: str
     report_year: str
 
-@dataclass
+@dataclass(frozen=True)
 class Representative:
     """Dataclass to hold representative team information."""
 
     representative_id: int | None
     representative_name: str
 
-@dataclass
+@dataclass(frozen=True)
 class RepresentativeTeam:
     """Dataclass to hold rep team information."""
 
     team_id: int | None
     team_name: str
 
-@dataclass
+@dataclass(frozen=True)
 class RepTeamCustomerLocation:
     """Dataclass to hold customer locations per rep team."""
 
@@ -221,7 +221,7 @@ class RepTeamCustomerLocation:
     customer_id: int
     location_id: int
 
-@dataclass
+@dataclass(frozen=True)
 class TeamMember:
     """Dataclass to hold team member information."""
 
@@ -448,8 +448,10 @@ class CustomerDAO(DAO):
                 "ON CONFLICT DO NOTHING RETURNING customer_id",
                 (customer.customer_name,),
             )
-            customer.customer_id = cursor.fetchone()[0]
-        return customer
+            return Customer(
+                customer_id=cursor.fetchone()[0],
+                customer_name=customer.customer_name,
+            )
 
     def create_bulk(self, lines: list[Customer]) -> None:
         """Insert a list of customers into the database.
@@ -695,8 +697,11 @@ class LocationDAO(DAO):
                 "ON CONFLICT DO NOTHING RETURNING location_id ",
                 (location.city, location.state),
             )
-            location.location_id = cursor.fetchone()[0]
-        return location
+            return Location(
+                location_id=cursor.fetchone()[0],
+                city=location.city,
+                state=location.state,
+            )
 
     def create_bulk(self, lines: list[Location]) -> None:
         """Insert a list of locations into the database.
@@ -715,7 +720,7 @@ class LocationDAO(DAO):
             psycopg2.extras.execute_values(
                 cursor,
                 "INSERT INTO locations (city, state) "
-                "VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                "VALUES %s ON CONFLICT DO NOTHING",
                 values,
                 page_size=500,
             )
@@ -792,7 +797,7 @@ class CustomerLocationDAO(DAO):
 
         """
         with self.connector.cursor() as cursor:
-            cursor.execute(f"{self.select}")
+            cursor.execute(f"{self._select}")
             return {self._from_row(row) for row in cursor.fetchall()}
 
     def get_locations_for_customer(self, customer_id: int) -> list[CustomerLocation]:
@@ -859,7 +864,7 @@ class CustomerLocationDAO(DAO):
             psycopg2.extras.execute_values(
                 cursor,
                 "INSERT INTO customer_locations (customer_id, location_id) "
-                "VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                "VALUES %s ON CONFLICT DO NOTHING",
                 values,
                 page_size=500,
             )
@@ -960,8 +965,11 @@ class ManufacturerDAO(DAO):
                     manufacturer.manufacturer_classification,
                 ),
             )
-            manufacturer.manufacturer_id = cursor.fetchone()[0]
-        return manufacturer
+            return Manufacturer(
+                manufacturer_id=cursor.fetchone()[0],
+                manufacturer_name=manufacturer.manufacturer_name,
+                manufacturer_classification=manufacturer.manufacturer_classification,
+            )
 
     def update(self, manufacturer: Manufacturer) -> None:
         """Update a manufacturer in the database.
@@ -1127,8 +1135,12 @@ class ItemDAO(DAO):
                 "VALUES (%s, %s, %s) RETURNING item_id",
                 (item.stockcode, item.product_family, item.product_description),
             )
-            item.item_id = cursor.fetchone()[0]
-        return item
+            return Item(
+                item_id=cursor.fetchone()[0],
+                stockcode=item.stockcode,
+                product_family=item.product_family,
+                product_description=item.product_description,
+            )
 
     def update(self, item: Item) -> None:
         """Update an item in the database.
@@ -1279,8 +1291,12 @@ class SalesReportDAO(DAO):
                 "VALUES (%s, %s, %s) RETURNING report_id",
                 (report.manufacturer_id, report.report_year, report.report_month),
             )
-            report.report_id = cursor.fetchone()[0]
-        return report
+            return SalesReport(
+                report_id=cursor.fetchone()[0],
+                manufacturer_id=report.manufacturer_id,
+                report_year=report.report_year,
+                report_month=report.report_month,
+            )
 
     def delete(self, report_id: int) -> None:
         """Delete a sales report from the database.
@@ -1362,7 +1378,7 @@ class RepresentativeDAO(DAO):
         """
         with self.connector.cursor() as cursor:
             cursor.execute(f"{self._select} ORDER BY {self._pk} LIMIT %s", (limit,))
-            return {x[0]: x[1] for x in cursor.fetchall()}
+            return {x[1]: x[0] for x in cursor.fetchall()}
 
     def get_by_id(self, representative_id: int) -> Representative | None:
         """Retrieve a representative team based on its ID.
@@ -1398,17 +1414,19 @@ class RepresentativeDAO(DAO):
 
         """
         with self.connector.cursor() as cursor:
-                cursor.execute(
-                    "INSERT INTO representatives "
-                    "(representative_name) "
-                    "VALUES (%s) ON CONFLICT DO NOTHING "
-                    "RETURNING representative_id",
-                    (
-                        representative.representative_name
-                    ),
-                )
-                representative.representative_id = cursor.fetchone()[0]
-                return representative
+            cursor.execute(
+                "INSERT INTO representatives "
+                "(representative_name) "
+                "VALUES (%s) ON CONFLICT DO NOTHING "
+                "RETURNING representative_id",
+                (
+                    representative.representative_name
+                ),
+            )
+            return Representative(
+                representative_id=cursor.fetchone()[0],
+                representative_name=representative.representative_name,
+            )
 
     def create_bulk(self, lines: list[Representative]) -> None:
         """Insert a list of representatives into the database.
@@ -1419,7 +1437,7 @@ class RepresentativeDAO(DAO):
 
         """
         if not lines:
-            return lines
+            return
 
         values = [(ln.representative_name,) for ln in lines]
 
@@ -1431,7 +1449,6 @@ class RepresentativeDAO(DAO):
                 values,
                 page_size=500,
             )
-            return None
 
     def delete(self, representative_id: int) -> None:
         """Delete a representative team from the database.
@@ -1507,6 +1524,22 @@ class RepresentativeTeamsDAO(DAO):
             row = cursor.fetchone()
             return self._from_row(row) if row else None
 
+    def get_all_as_dict(self, limit: int = 15_000) -> dict[str, int]:
+        """Retrieve all entries within associated table as a dictionary.
+
+        Utilizes internal select statement and primary key to select and order
+        data from the associated table. Returns dictionary for use in joining
+        reference tables or viewing large tables.
+
+        Args:
+            limit(int):
+                The line limit the function should not exceed.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(f"{self._select} ORDER BY {self._pk} LIMIT %s", (limit,))
+            return {x[1]: x[0] for x in cursor.fetchall()}
+
     def create(self, team: RepresentativeTeam) -> RepresentativeTeam | None:
         """Insert a new representative team into the database.
 
@@ -1526,14 +1559,11 @@ class RepresentativeTeamsDAO(DAO):
                     "(team_name) "
                     "VALUES (%s) ON CONFLICT DO NOTHING "
                     "RETURNING representative_id",
-                    (
-                        team.team_name
-                    ),
+                    (team.team_name,),
                 )
-                _id = cursor.fetchone
+                _id = cursor.fetchone()
                 if _id:
-                    team.team_id = _id
-                    return team
+                    return RepresentativeTeam(team_id=_id, team_name=team.team_name)
                 return None
 
     def create_bulk(self, lines: list[RepresentativeTeam]) -> None:
@@ -1545,7 +1575,7 @@ class RepresentativeTeamsDAO(DAO):
 
         """
         if not lines:
-            return lines
+            return
 
         values = [(ln.team_name,) for ln in lines]
 
@@ -1557,7 +1587,6 @@ class RepresentativeTeamsDAO(DAO):
                 values,
                 page_size=500,
             )
-            return None
 
     def delete(self, team_id: int) -> None:
         """Delete a rep team from the database.
@@ -1678,14 +1707,14 @@ class RepTeamCustomerLocationDAO(DAO):
         if not lines:
             return lines
 
-        values = [(ln.team_name,) for ln in lines]
+        values = [(ln.team_id, ln.customer_id, ln.location_id) for ln in lines]
 
         with self.connector.cursor() as cursor:
             psycopg2.extras.execute_values(
                 cursor,
                 "INSERT INTO rep_team_customer_locations "
                 "(team_id, customer_id, location_id) "
-                "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
+                "VALUES %s ON CONFLICT DO NOTHING",
                 values,
                 page_size=500,
             )
@@ -1813,9 +1842,9 @@ class TeamMemberDAO(DAO):
         with self.connector.cursor() as cursor:
             psycopg2.extras.execute_values(
                 cursor,
-                "INSERT INTO rep_team_customer_locations "
-                "(team_id, customer_id, location_id) "
-                "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
+                "INSERT INTO team_members "
+                "(team_id, representative_id, rep_classification) "
+                "VALUES %s ON CONFLICT DO NOTHING",
                 values,
                 page_size=500,
             )
@@ -1837,8 +1866,7 @@ class ReportLineDAO(DAO):
         "amt, "
         "transfer, "
         "location_id, "
-        "sale_date, "
-        "rep_team "
+        "sale_date "
         "FROM report_line"
     )
 
@@ -1854,7 +1882,6 @@ class ReportLineDAO(DAO):
             row[7],
             row[8],
             row[9],
-            row[10],
         )
 
     def get_by_id(self, report_line_id: int) -> ReportLine | None:
@@ -1957,9 +1984,8 @@ class ReportLineDAO(DAO):
                            "amt, "
                            "transfer, "
                            "location_id, "
-                           "sale_date, "
-                           "rep_team) "
-                           "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                           "sale_date) "
+                           "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                         (
                             line.report_id,
                             line.customer_id,
@@ -2008,6 +2034,7 @@ class ReportLineDAO(DAO):
             cursor.execute(
                 "insert into report_line "
                 "(report_id, "
+                "customer_alias, "
                 "customer_id, "
                 "item_id, "
                 "location_id, "
@@ -2015,7 +2042,7 @@ class ReportLineDAO(DAO):
                 "sale_date, "
                 "quantity, "
                 "transfer) "
-                "values (%s, %s, %s, %s, %s, %s, %s, %s);",
+                "values (%s, %s, %s, %s, %s, %s, %s, %s, %s);",
                 (
                     report_id,
                     customer_id,
@@ -2066,8 +2093,7 @@ class ReportLineDAO(DAO):
                 "amt, "
                 "transfer, "
                 "location_id, "
-                "sale_date, "
-                "rep_team) "
+                "sale_date) "
                 "VALUES %s",
                 values,
                 page_size=500,

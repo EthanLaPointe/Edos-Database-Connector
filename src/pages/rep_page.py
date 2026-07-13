@@ -1,5 +1,6 @@
 """Contains implementation for RepPage class and any related worker classes."""
 
+import traceback
 from enum import Enum, auto
 from pathlib import Path
 from typing import ClassVar
@@ -163,14 +164,14 @@ class RepWorker(QThread):
         emitted after READ_AND_CHECK
     all_done(success):
         emitted after INSERT
-    error(message):
+    error(message, traceback):
         emitted on unexpected exception
 
     """
 
     check_done = Signal(pd.DataFrame, bool)
     all_done = Signal(bool)
-    error = Signal(str)
+    error = Signal(str, str)
 
     def __init__(self, cache: DataCache) -> None:
         """Initialize a new RepWorker instance.
@@ -205,7 +206,7 @@ class RepWorker(QThread):
                 self._insert(handler)
 
         except Exception as e: # noqa: BLE001
-            self.error.emit(str(e))
+            self.error.emit(str(e), traceback.format_exc())
             if self._task == _Task.INSERT:
                 self.all_done.emit(False)  # noqa: FBT003
 
@@ -376,7 +377,7 @@ class RepPage(QWidget):
         self.insert_btn.setMinimumSize(180, 44)
         self.insert_btn.setCursor(Qt.PointingHandCursor)
         self.insert_btn.setEnabled(False)
-        self.insert_btn.clicked.connect(self._handle_insert)
+        self.insert_btn.clicked.connect(self._handler_insert)
         submit_row.addWidget(self.insert_btn)
 
         layout.addLayout(submit_row)
@@ -491,12 +492,16 @@ class RepPage(QWidget):
         if self.worker:
             self.worker.cache = cache
 
-    def _on_worker_error(self, message: str) -> None:
+    def _on_worker_error(self, message: str, trace: str) -> None:
         self._lock_ui(locked=False)
-        QMessageBox.critical(
-            self, "Unexpected Error",
-            f"An error occurred while processing:\n\n{message}",
-        )
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Critical)
+        box.setWindowTitle("Unexpected Error")
+        box.setText("An error occurred while processing the representative file.")
+        box.setInformativeText(message)
+        box.setDetailedText(trace)
+        box.setStandardButtons(QMessageBox.Ok)
+        box.exec()
 
     # Helpers
     def _lock_ui(self, *, locked: bool) -> None:

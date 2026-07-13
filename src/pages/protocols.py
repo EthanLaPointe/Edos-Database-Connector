@@ -11,4 +11,5 @@ class AppController(Protocol):
     def show_home(self) -> None: ...  # noqa: D102
     def show_report(self) -> None: ...  # noqa: D102
     def show_alias(self) -> None: ...  # noqa: D102
+    def show_rep(self) -> None: ... # noqa: D102
     def logout(self) -> None: ...  # noqa: D102

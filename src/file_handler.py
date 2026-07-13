@@ -240,8 +240,6 @@ class FileHandler:
                 ).item_id
                 self.cache.items[line_data["stockcode"]] = item_id
 
-            # Get representative team associated with customer location
-
             # save each line of report to a list of ReportLine
             line = ReportLine(
                 report_line_id=None,
@@ -377,7 +375,7 @@ class FileHandler:
             dataframe["customername"]
             .astype(str)
             .str.replace(r"\(.*?\)", "", regex=True)
-            .str.replace(r"[.'(),-_]", " ", regex=True)
+            .str.replace(r"[.(),-_#]", " ", regex=True)
             .str.replace(r" +", " ", regex=True)
             .str.strip()
         )
@@ -617,12 +615,16 @@ class FileHandler:
 
         if column_list == REP_MAPPING_FIELD_LIST:
             valid_columns = True
+        else:
+            valid_columns = False
+            return (dataframe, valid_columns)
 
         # Filter names in name and superparent columns to match report filtering
         dataframe = dataframe.apply(
             lambda col: col.str.lower()
             if pd.api.types.is_string_dtype(col) else col,
         )
+        dataframe.columns = REP_MAPPING_FIELD_LIST
         dataframe["superparent"] = dataframe["superparent"].astype(str).str.replace(
             r"[.'(),-]",
             "",
@@ -677,8 +679,8 @@ class FileHandler:
             alias_list.append(
                 CustomerAlias(alias=row[0], customer_id=self.cache.customers[row[1]]),
             )
-            location_list.append(Location(city=row[2], state=row[3]))
-            rep_teams.add(RepresentativeTeam(team_name=row[4]))
+            location_list.append(Location(location_id=None, city=row[2], state=row[3]))
+            rep_teams.add(RepresentativeTeam(team_id=None, team_name=row[4]))
 
         self.dao.customer_aliases.create_bulk(alias_list)
         self.dao.locations.create_bulk(location_list)
@@ -686,6 +688,7 @@ class FileHandler:
 
         self.cache.refresh_locations()
         self.cache.refresh_customer_aliases()
+        self.cache.refresh_rep_teams()
 
         # Get all customer locations and insert them
         cl_list = [
@@ -703,6 +706,7 @@ class FileHandler:
         rtcl_list = []
         reps = []
         tmp_members = []
+
         for row in dataframe.itertuples(index=False):
             customer_id = self.cache.customers[row[1]]
             location_id = self.cache.locations[(row[2], row[3])]
@@ -714,10 +718,18 @@ class FileHandler:
             )
             rtcl_list.append(rtcl)
             if row[5]:
-                reps.append(Representative(row[5]))
+                reps.append(Representative(
+                    representative_id=None,
+                    representative_name=row[5],
+                    ),
+                )
                 tmp_members.append((row[5], team_id, Classification.HEATING))
             if row[6]:
-                reps.append(Representative(row[6]))
+                reps.append(Representative(
+                    representative_id=None,
+                    representative_name=row[6],
+                    ),
+                )
                 tmp_members.append((row[6], team_id, Classification.PLUMBING))
 
         # Insert rep team locations and representatives

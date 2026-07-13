@@ -71,4 +71,4 @@ class DataCache:
 
     def refresh_rep_teams(self) -> None:
         """Refresh rep teams dict."""
-        self.representative_teams = self._factory.rep_teams.get_all_as_dict()
+        self.rep_teams = self._factory.rep_teams.get_all_as_dict()

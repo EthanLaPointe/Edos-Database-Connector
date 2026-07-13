@@ -426,9 +426,7 @@ class ReportFlagDialog(QDialog):
                 customer = _factory.customers.create(
                     Customer(customer_id=None, customer_name=alias),
                 )
-                alias_key = customer.customer_name
-                self.cache.customers[customer.customer_name] = customer.customer_id
-                self.cache.customer_aliases[alias_key] = customer.customer_id
+                self.cache.refresh_customer_aliases()
                 self._refresh_name_completers()
                 self._show_status(
                     f"{customer.customer_name} successfully added as new customer",
