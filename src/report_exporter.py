@@ -8,6 +8,7 @@ import psycopg2.extras
 
 from src.db_connection import DBConnector
 
+# Column names must match database column names
 EXPORT_COLUMNS = [
     "manufacturer_name",
     "report_year",
@@ -22,40 +23,53 @@ EXPORT_COLUMNS = [
     "amt",
     "quantity",
     "transfer",
-    "rep_team",
-    "representative",
+    "team_name",
+    "representative_name",
 ]
 
 _REPORT_QUERY = """
-    SELECT
-        m.manufacturer_name,
-        sr.report_year,
-        sr.report_month,
-        rl.customer_alias,
-        c.customer_name,
-        l.city,
-        l.state,
-        i.stockcode,
-        i.product_family,
-        i.product_description,
-        rl.amt,
-        rl.quantity,
-        rl.transfer,
-        r.team_name,
-        CASE m.manufacturer_classification
-            WHEN 'heating' THEN r.heating_rep
-            WHEN 'plumbing' THEN r.plumbing_rep
-            ELSE 'N/A'
-        END AS representative
-    FROM report_line rl
-    JOIN sales_report sr  ON rl.report_id       = sr.report_id
-    JOIN manufacturers m  ON sr.manufacturer_id = m.manufacturer_id
-    JOIN customers c      ON rl.customer_id     = c.customer_id
-    JOIN locations l      ON rl.location_id     = l.location_id
-    JOIN item i           ON rl.item_id         = i.item_id
-    JOIN representatives r ON rl.rep_team       = r.representative_id
-    WHERE rl.report_id = %s
-    ORDER BY rl.report_line_id
+            select
+                m.manufacturer_name,
+                sr.report_year,
+                sr.report_month,
+                rl.customer_alias,
+                c.customer_name,
+                l.city,
+                l.state,
+                i.stockcode,
+                i.product_family,
+                i.product_description,
+                rl.amt,
+                rl.quantity,
+                rl.transfer,
+                rt.team_name,
+                rep.representative_name
+            from report_line rl
+            join sales_report sr
+                on rl.report_id = sr.report_id
+            join manufacturers m
+                on sr.manufacturer_id = m.manufacturer_id
+            join customers c
+                on rl.customer_id = c.customer_id
+            join locations l
+                on rl.location_id = l.location_id
+            join item i
+                on rl.item_id = i.item_id
+            left join rep_team_customer_locations rtcl
+                on rtcl.customer_id = rl.customer_id
+                and rtcl.location_id = rl.location_id
+            left join representative_teams rt
+                on rt.team_id = rtcl.team_id
+            left join team_members tm
+                on tm.team_id = rtcl.team_id
+                and tm.rep_classification = m.manufacturer_classification
+            left join representatives rep
+                on rep.representative_id = tm.representative_id
+            where rl.report_id = %s
+            order by
+                c.customer_name,
+                l.city,
+                i.stockcode;
 """
 
 
