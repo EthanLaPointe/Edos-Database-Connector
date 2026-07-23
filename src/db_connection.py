@@ -430,7 +430,7 @@ class CustomerDAO(DAO):
             row = cursor.fetchone()
         return self._from_row(row) if row else None
 
-    def create(self, customer: Customer) -> Customer:
+    def create(self, customer: Customer) -> Customer | None:
         """Add customer to the database.
 
         Args:
@@ -448,10 +448,13 @@ class CustomerDAO(DAO):
                 "ON CONFLICT DO NOTHING RETURNING customer_id",
                 (customer.customer_name,),
             )
-            return Customer(
-                customer_id=cursor.fetchone()[0],
-                customer_name=customer.customer_name,
-            )
+            row = cursor.fetchone()
+            if row:
+                return Customer(
+                    customer_id=cursor.fetchone()[0],
+                    customer_name=customer.customer_name,
+                )
+            return None
 
     def create_bulk(self, lines: list[Customer]) -> None:
         """Insert a list of customers into the database.
@@ -529,7 +532,7 @@ class CustomerAliasDAO(DAO):
             cursor.execute(f"{self._select} WHERE customer_id = %s", (customer_id,))
             return [CustomerAlias(**row) for row in cursor.fetchall()]
 
-    def create(self, alias: CustomerAlias) -> None:
+    def create(self, alias: CustomerAlias) -> bool:
         """Insert a new customer alias into the database.
 
         Args:
@@ -539,24 +542,24 @@ class CustomerAliasDAO(DAO):
         """
         with self.connector.cursor() as cursor:
             cursor.execute(
-                "INSERT INTO customer_alias (alias, customer_id) VALUES (%s, %s)",
+                "INSERT INTO customer_alias (alias, customer_id) "
+                "VALUES (%s, %s) "
+                "ON CONFLICT DO NOTHING "
+                "RETURNING true",
                 (alias.alias, alias.customer_id),
             )
+            return bool(cursor.fetchone())
 
-    def create_bulk(self, lines: list[CustomerAlias]) -> bool:
+    def create_bulk(self, lines: list[CustomerAlias]) -> None:
         """Insert list of CustomerAliases into database.
 
         Args:
             lines (list[CustomerAlias]):
                 The list of aliases to be inserted into the database.
 
-        Returns:
-            bool:
-                True if the insert was successful, False if the list was empty.
-
         """
         if not lines:
-            return False
+            return
 
         values = [(ln.alias, ln.customer_id) for ln in lines]
 
@@ -568,8 +571,6 @@ class CustomerAliasDAO(DAO):
                 values,
                 page_size=500,
             )
-            return True
-
 
     def delete(self, alias: str) -> None:
         """Delete a customer alias from the database.
@@ -1423,10 +1424,13 @@ class RepresentativeDAO(DAO):
                     representative.representative_name
                 ),
             )
-            return Representative(
-                representative_id=cursor.fetchone()[0],
-                representative_name=representative.representative_name,
-            )
+            row = cursor.fetchone()
+            if row:
+                return Representative(
+                    representative_id=cursor.fetchone()[0],
+                    representative_name=representative.representative_name,
+                )
+            return None
 
     def create_bulk(self, lines: list[Representative]) -> None:
         """Insert a list of representatives into the database.

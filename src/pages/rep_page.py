@@ -16,15 +16,18 @@ from PySide6.QtCore import (
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QListWidget,
     QMessageBox,
     QPushButton,
     QScrollArea,
     QTableView,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -32,7 +35,13 @@ from PySide6.QtWidgets import (
 from pages.protocols import AppController
 from pages.sidebar import Sidebar
 from src.data_cache import DataCache
-from src.db_connection import DAOFactory, DBConnector
+from src.db_connection import (
+    DAOFactory,
+    DBConnector,
+    Representative,
+    RepresentativeTeam,
+    RepTeamCustomerLocation,
+)
 from src.file_handler import REP_MAPPING_FIELD_LIST, FileHandler
 
 # Table Column Indices
@@ -233,6 +242,184 @@ class RepWorker(QThread):
         self._task = _Task.INSERT
         self.start()
 
+class _ManageTask(Enum):
+    """Tasks handled by ManageWorker."""
+
+    CREATE_REP = auto()
+    CREATE_TEAM = auto()
+    CREATE_MEMBER = auto()
+    CREATE_RTCL = auto()
+    LOAD_TEAM_MEMBERS = auto()
+
+class ManageWorker(QThread):
+    """Handles single-record creation of reps, teams, and their relationships.
+
+    This worker intentionally calls straight into the existing DAO layer
+    (DAOFactory) rather than a dedicated FileHandler method, since the
+    single record creation/validation flows (duplicate handling, referential
+    checks, ect.) are still TODOs on the backend. Swap the bodies of the
+    '_create_*' the public start_* API and emitted signals are meant to
+    stay stable so the UI in RepPage does not need to change.
+
+    Signals
+    -------
+    rep_created(success, message):
+        emitted after CREATE_REP
+    team_created(success, message):
+        emitted after CREATE_TEAM
+    member_created(success, message):
+        emitted after CREATE_MEMBER
+    rtcl_created(success, message):
+        emitted after CREATE_RTCL
+    members_loaded(members):
+        emitted after LOAD_TEAM_MEMBERS
+    error(message, traceback):
+        emitted on unexpected exception
+
+    """
+
+    rep_created = Signal(bool, str)
+    team_created = Signal(bool, str)
+    member_created = Signal(bool, str)
+    rtcl_created = Signal(bool, str)
+    members_loaded = Signal(list)
+    error = Signal(str, str)
+
+    def __init__(self, cache: DataCache | None) -> None:
+        """Initialize a new ManageWorker instance.
+
+        Args:
+            cache (DataCache | None):
+                The DataCache of the main app. May be None until login.
+
+        """
+        super().__init__()
+        self.cache = cache
+        self._task: _ManageTask | None = None
+
+        # Payloads set by the start_* methods below.
+        self._rep_name: str = ""
+        self._team_name: str = ""
+        self._member_team_id: int | None = None
+        self._member_rep_id: int | None = None
+        self._member_classification: str = ""
+        self._rtcl_team_id: int | None = None
+        self._rtcl_customer_id: int | None = None
+        self._rtcl_location_id: int | None = None
+
+    def run(self) -> None:
+        """Open a connection, dispatch to the correct handler, then close it."""
+        connector = DBConnector()
+        try:
+            connector.connect()
+            factory = DAOFactory(connector)
+
+            match self._task:
+                case _ManageTask.CREATE_REP:
+                    self._create_rep(factory)
+                case _ManageTask.CREATE_TEAM:
+                    self._create_team(factory)
+                case _ManageTask.CREATE_MEMBER:
+                    self._create_member(factory)
+                case _ManageTask.CREATE_RTCL:
+                    self._create_rtcl(factory)
+                case _ManageTask.LOAD_TEAM_MEMBERS:
+                    self._load_team_members(factory)
+
+        except Exception as e:  # noqa: BLE001
+            self.error.emit(str(e), traceback.format_exc())
+
+        finally:
+            connector.close()
+
+    # Private Worker Tasks
+    def _create_rep(self, factory: DAOFactory) -> None:
+        # TODO: backend - RepresentativeDAO.create() needs a duplicate check
+        # (ON CONFLICT DO NOTHING currently returns None and will raise here).
+        rep = factory.representative.create(
+            Representative(representative_id=None, representative_name=self._rep_name),
+        )
+        if self.cache is not None:
+            self.cache.refresh_representatives()
+        self.rep_created.emit(
+            True, f"Representative '{rep.representative_name}' added.",
+        )
+
+    def _create_team(self, factory: DAOFactory) -> None:
+        # TODO: backend - RepresentativeTeamsDAO.create() needs a duplicate check.
+        team = factory.rep_teams.create(
+            RepresentativeTeam(team_id=None, team_name=self._team_name),
+        )
+        if self.cache is not None:
+            self.cache.refresh_rep_teams()
+        if team is not None:
+            self.team_created.emit(True, f"Team '{team.team_name}' added.")
+        else:
+            self.team_created.emit(
+                False, f"'{self._team_name}' already exists or could not be added.",
+            )
+
+    def _create_member(self, factory: DAOFactory) -> None:
+        factory.team_members.create(
+            self._member_team_id,
+            self._member_rep_id,
+            self._member_classification,
+        )
+        self.member_created.emit(True, "Representative assigned to team.")
+
+    def _create_rtcl(self, factory: DAOFactory) -> None:
+        factory.rtcl.create(
+            RepTeamCustomerLocation(
+                team_id=self._rtcl_team_id,
+                customer_id=self._rtcl_customer_id,
+                location_id=self._rtcl_location_id,
+            ),
+        )
+        self.rtcl_created.emit(True, "Customer location assigned to team.")
+
+    def _load_team_members(self, factory: DAOFactory) -> None:
+        members = factory.team_members.get_by_team(self._member_team_id)
+        self.members_loaded.emit(list(members))
+
+    # Public worker methods
+    def start_create_representative(self, name: str) -> None:
+        """Create a new representative. Emits rep_created."""
+        self._rep_name = name
+        self._task = _ManageTask.CREATE_REP
+        self.start()
+
+    def start_create_team(self, name: str) -> None:
+        """Create a new representative team. Emits team_created."""
+        self._team_name = name
+        self._task = _ManageTask.CREATE_TEAM
+        self.start()
+
+    def start_create_member(
+        self, team_id: int, rep_id: int, classification: str,
+    ) -> None:
+        """Assign a representative to a team. Emits member_created."""
+        self._member_team_id = team_id
+        self._member_rep_id = rep_id
+        self._member_classification = classification
+        self._task = _ManageTask.CREATE_MEMBER
+        self.start()
+
+    def start_create_rtcl(
+        self, team_id: int, customer_id: int, location_id: int,
+    ) -> None:
+        """Link a team to a customer location. Emits rtcl_created."""
+        self._rtcl_team_id = team_id
+        self._rtcl_customer_id = customer_id
+        self._rtcl_location_id = location_id
+        self._task = _ManageTask.CREATE_RTCL
+        self.start()
+
+    def start_load_team_members(self, team_id: int) -> None:
+        """Load all members of a team. Emits members_loaded."""
+        self._member_team_id = team_id
+        self._task = _ManageTask.LOAD_TEAM_MEMBERS
+        self.start()
+
 class RepPage(QWidget):
     """Class for displaying and handling of representative mapping files."""
 
@@ -254,6 +441,10 @@ class RepPage(QWidget):
         self.worker: RepWorker | None = None
         controller.cache_updated.connect(self._on_cache_updated)
         self._mappings: pd.DataFrame = pd.DataFrame()
+
+        self.manage_worker = ManageWorker(self._cache)
+        self._wire_manage_worker()
+
         self._build_ui()
 
     # UI Builder
