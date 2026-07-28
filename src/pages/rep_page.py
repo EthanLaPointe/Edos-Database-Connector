@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QListWidget,
     QMessageBox,
     QPushButton,
@@ -50,6 +51,12 @@ COL_SUPERPARENT = 1
 
 _COLUMN_HEADERS = [
     "Name", "Superparent", "City", "State", "New Team", "Heating", "Plumbing",
+]
+
+# Classifications for team member assignment
+CLASSIFICATIONS: list[tuple[str, str]] = [
+    ("heating,", "Heating"),
+    ("plumbing", "Plumbing"),
 ]
 
 # Table Class
@@ -457,10 +464,16 @@ class RepPage(QWidget):
         self.sidebar = Sidebar(controller=self.controller, active_page="rep")
         root.addWidget(self.sidebar)
 
+        self.tabs = QTabWidget()
+        self.tabs.addTab(self._build_bulk_tab(), "Bulk Mapping Import")
+        self.tabs.addTab(self._build_manage_tab(), "Representatives && Teams")
+        root.addWidget(self.tabs)
+
+    # Tab 1: Bulk CSV Mapping
+    def _build_bulk_tab(self) -> QWidget:  # noqa: PLR0915
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
-        root.addWidget(scroll)
 
         content = QWidget()
         content.setObjectName("content")
@@ -477,8 +490,8 @@ class RepPage(QWidget):
         layout.addSpacing(4)
 
         sub = QLabel(
-            "Select a CSV file mapping customers to representative teams. "
-            "Preview the mappings below, then click Insert to save the.",
+            "Select a CSV file mapping customers to representative teams."
+            "Preview the mappings below, then click Insert to save them.",
         )
         sub.setObjectName("subtitle")
         sub.setWordWrap(True)
@@ -547,9 +560,6 @@ class RepPage(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(
             COL_NAME, QHeaderView.Stretch,
         )
-        self.table.horizontalHeader().setSectionResizeMode(
-            COL_SUPERPARENT, QHeaderView.Stretch,
-        )
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -573,6 +583,413 @@ class RepPage(QWidget):
 
         layout.addLayout(submit_row)
         layout.addStretch()
+
+        return scroll
+
+    # Tab 2: Manage Representatives, Teams, and relations
+    def _build_manage_tab(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+
+        content = QWidget()
+        content.setObjectName("content")
+        scroll.setWidget(content)
+
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(32, 28, 32, 28)
+        layout.setSpacing(0)
+
+        title = QLabel("Manage Representatives && Teams")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        layout.addSpacing(4)
+
+        sub = QLabel(
+            "Create individual representatives and teams, assign representatives "
+            "to teams, and link teams to customer locations. ",
+        )
+        sub.setObjectName("subtitle")
+        sub.setWordWrap(True)
+        layout.addWidget(sub)
+        layout.addSpacing(24)
+
+        layout.addWidget(self._build_representative_section())
+        layout.addSpacing(20)
+        layout.addWidget(self._build_team_section())
+        layout.addSpacing(20)
+        layout.addWidget(self._build_team_member_section())
+        layout.addSpacing(20)
+        layout.addWidget(self._build_rtcl_section())
+        layout.addStretch()
+
+        return scroll
+
+    def _build_representative_section(self) -> QFrame:
+        frame = QFrame()
+        frame.setObjectName("formSection")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        layout.addWidget(self._section_label("Representatives"))
+
+        row = QHBoxLayout()
+        row.setSpacing(10)
+
+        self.rep_name_input = QLineEdit()
+        self.rep_name_input.setPlaceholderText("Representative name")
+        self.rep_name_input.setMinimumHeight(40)
+        self.rep_name_input.returnPressed.connect(self._handle_create_representative)
+        row.addWidget(self.rep_name_input, stretch=1)
+
+        self.add_rep_btn = QPushButton("Add Representative")
+        self.add_rep_btn.setCursor(Qt.PointingHandCursor)
+        self.add_rep_btn.setMinimumHeight(40)
+        self.add_rep_btn.clicked.connect(self._handler_create_representative)
+        row.addWidget(self.add_rep_btn)
+
+        layout.addLayout(row)
+
+        self.rep_status_lbl = QLabel("")
+        self.rep_status_lbl.setWordWrap(True)
+        self.rep_status_lbl.setVisible(False)
+        layout.addWidget(self.rep_status_lbl)
+
+        hint = QLabel("Existing representatives:")
+        hint.setObjectName("hintLabel")
+        layout.addWidget(hint)
+
+        self.rep_list = QListWidget()
+        self.rep_list.setMaximumHeight(140)
+        layout.addWidget(self.rep_list)
+
+        return frame
+
+    def _build_team_section(self) -> QFrame:
+        frame = QFrame()
+        frame.setObjectName("formSection")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        layout.addWidget(self._section_label("Representative Teams"))
+
+        row = QHBoxLayout()
+        row.setSpacing(10)
+
+        self.team_name_input = QLineEdit()
+        self.team_name_input.setPlaceholderText("Team name")
+        self.team_name_input.setMaximumHeight(40)
+        self.team_name_input.returnPressed.connect(self._handle_create_team)
+        row.addWidget(self.team_name_input, stretch=1)
+
+        self.add_team_btn = QPushButton("Add Team")
+        self.add_team_btn.setCursor(Qt.PointingHandCursor)
+        self.add_team_btn.setMinimumHeight(40)
+        self.add_team_btn.clicked.connect(self._handle_create_team)
+        row.addWidget(self.add_team_btn)
+
+        layout.addLayout(row)
+
+        self.team_status_lbl = QLabel("")
+        self.team_status_lbl.setWordWrap(True)
+        self.team_status_lbl.setVisible(False)
+        layout.addWidget(self.team_status_lbl)
+
+        hint = QLabel("Existing teams:")
+        hint.setObjectName("hintLabel")
+        layout.addWidget(hint)
+
+        self.team_list = QListWidget()
+        self.team_list.setMaximumHeight(140)
+        layout.addWidget(self.team_list)
+
+        return frame
+
+    def _build_team_member_section(self) -> QFrame:
+        frame = QFrame()
+        frame.setObjectName("formSection")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        layout.addWidget(self._section_label("Team Members"))
+
+        hint = QLabel(
+            "Assign a representative to a team for a given service classification.",
+        )
+        hint.setObjectName("hintLabel")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        form_row = QHBoxLayout()
+        form_row.setSpacing(10)
+
+        self.member_team_combo = QComboBox()
+        self.member_team_combo.setMinimumHeight(40)
+        self.member_team_combo.currentIndexChanged.connect(
+            self._on_member_team_changed,
+        )
+        form_row.addWidget(self.member_team_combo, stretch=1)
+
+        self.member_rep_combo = QComboBox()
+        self.member_team_combo.setMinimumHeight(40)
+        form_row.addWidget(self.member_rep_combo, stretch=1)
+
+        self.member_class_combo = QComboBox()
+        for value, label in CLASSIFICATIONS:
+            self.member_class_combo.addItem(label, userData=value)
+        self.member_class_combo.setMinimumHeight(40)
+        self.member_class_combo.setFixedWidth(130)
+        form_row.addWidget(self.member_class_combo)
+
+        layout.addLayout(form_row)
+
+        self.add_member_btn = QPushButton("Assign Representative to Team")
+        self.add_member_btn.setCursor(Qt.PointingHandCursor)
+        self.add_member_btn.setMinimumHeight(40)
+        self.add_member_btn.clicked.connect(self._handle_create_member)
+        layout.addWidget(self.add_member_btn)
+
+        self.member_status_lbl = QLabel("")
+        self.member_status_lbl.setWordWrap(True)
+        self.member_status_lbl.setVisible(False)
+        layout.addWidget(self.member_status_lbl)
+
+        hint2 = QLabel("Current members of selected team:")
+        hint2.setObjectName("hintLabel")
+        layout.addWidget(hint2)
+
+        self.team_member_list = QListWidget()
+        self.team_member_list.setMaximumHeight(140)
+        layout.addWidget(self.team_member_list)
+
+        return frame
+
+    def _build_rtcl_section(self) -> QFrame:
+        frame = QFrame()
+        frame.setObjectName("formSection")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        layout.addWidget(self._section_label("Team Customer Locations"))
+
+        hint = QLabel(
+            "Link a representative team to a customer's location. Reports for "
+            "this customer/location pair will route to the assigned team.",
+        )
+        hint.setObjectName("hintLabel")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        form_row = QHBoxLayout()
+        form_row.setSpacing(10)
+
+        self.rtcl_team_combo = QComboBox()
+        self.rtcl_team_combo.setMinimumHeight(40)
+        form_row.addWidget(self.rtcl_team_combo, stretch=1)
+
+        self.rtcl_customer_combo = QComboBox()
+        self.rtcl_customer_combo.setMinimumHeight(40)
+        form_row.addWidget(self.rtcl_customer_combo, stretch=1)
+
+        self.rtcl_location_combo = QComboBox()
+        self.rtcl_location_combo.setMinimumHeight(40)
+        form_row.addWidget(self.rtcl_location_combo, stretch=1)
+
+        layout.addLayout(form_row)
+
+        self.add_rtcl_btn = QPushButton("Assign Team to Customer Location")
+        self.add_rtcl_btn.setCursor(Qt.PointingHandCursor)
+        self.add_rtcl_btn.setMinimumHeight(40)
+        self.add_rtcl_btn.clicked.connect(self._handle_create_rtcl)
+        layout.addWidget(self.add_rtcl_btn)
+
+        self.rtcl_status_lbl = QLabel("")
+        self.rtcl_status_lbl.setWordWrap(True)
+        self.rtcl_status_lbl.setVisible(False)
+        layout.addWidget(self.rtcl_status_lbl)
+
+        return frame
+
+    # Manage Worker Wiring
+    def _wire_manage_worker(self) -> None:
+        self.manage_worker.rep_created.connect(self._on_rep_created)
+        self.manage_worker.team_created.connect(self._on_team_created)
+        self.manage_worker.member_created.connect(self._on_member_created)
+        self.manage_worker.rtcl_created.connect(self._on_rtcl_created)
+        self.manage_worker.members_loaded.connect(self._on_members_loaded)
+        self.manage_worker.error.connect(self._on_manage_worker_error)
+
+    def _manage_worker_busy(self, status_lbl: QLabel) -> bool:
+        if self.manage_worker.isRunning():
+            self._show_manage_status(
+                status_lbl, "Please wait for the current action to finish.",
+                error=True,
+            )
+            return True
+        return False
+
+    # Manage Tab Handlers - Representatives
+    def _handle_create_representative(self) -> None:
+        name = self.rep_name_input.text().strip()
+        if not name:
+            self._show_manage_status(
+                self.rep_status_lbl, "Please enter a name.", error=True,
+            )
+            return
+        if self._manage_worker_busy(self.rep_status_lbl):
+            return
+        self.manage_worker.start_create_representative(name.lower())
+
+    def _on_rep_created(self, success: bool, message: str) -> None:
+        self._show_manage_status(self.rep_status_lbl, message, error=not success)
+        if success:
+            self.rep_name_input.clear()
+            self._refresh_manage_lists()
+
+    # Manage Tab Handlers - Teams
+    def _handle_create_team(self) -> None:
+        name = self.team_name_input.text().strip()
+        if not name:
+            self._show_manage_status(
+                self.team_status_lbl, "Please enter a team name.", error=True,
+            )
+            return
+        if self._manage_worker_busy(self.team_status_lbl):
+            return
+        self.manage_worker.start_create_team(name.lower())
+
+    def _on_team_created(self, success: bool, message: str) -> None:
+        self._show_manage_status(self.team_status_lbl, message, error=not success)
+        if success:
+            self.team_name_input.clear()
+            self._refresh_manage_lists()
+
+    # Manage Tab Handlers - Team Members
+    def _on_member_team_changed(self) -> None:
+        team_id = self.member_team_combo.currentData()
+        self.team_member_list.clear()
+        if team_id is not None and not self.manage_worker.isRunning():
+            self.manage_worker.start_load_team_members(team_id)
+
+    def _handle_create_member(self) -> None:
+        team_id = self.member_team_combo.currentData()
+        rep_id = self.member_rep_combo.currentData()
+        classification = self.member_class_combo.currentData()
+        if team_id is None or rep_id is None:
+            self._show_manage_status(
+                self.member_status_lbl,
+                "Select a team and representative first.",
+                error=True,
+            )
+            return
+        if self._manage_worker_busy(self.member_status_lbl):
+            return
+        self.manage_worker.start_create_member(team_id, rep_id, classification)
+
+    def _on_member_created(self, success: bool, message: str) -> None:
+        self._show_manage_status(self.member_status_lbl, message, error=not success)
+        if success:
+            team_id = self.member_team_combo.currentData()
+            if team_id is not None:
+                self.manage_worker.start_load_team_members(team_id)
+
+    def _on_members_loaded(self, members: list) -> None:
+        self.team_member_list.clear()
+        id_to_name = (
+            {v: k for k, v in self._cache.representatives.items()}
+            if self._cache else {}
+        )
+        for member in members:
+            rep_name = id_to_name.get(
+                member.representative_id, str(member.representative_id),
+            )
+            self.team_member_list.addItem(
+                f"{rep_name.title()} - {member.rep_classification}",
+            )
+
+    # Manage Tab Handlers - RTCL
+    def _handle_create_rtcl(self) -> None:
+        team_id = self.rtcl_team_combo.currentData()
+        customer_id = self.rtcl_customer_combo.currentData()
+        location_id = self.rtcl_location_combo.currentData()
+        if team_id is None or customer_id is None or location_id is None:
+            self._show_manage_status(
+                self.rtcl_status_lbl,
+                "Select a team, customer, and location.",
+                error=True,
+            )
+            return
+        if self._manage_worker_busy(self.rtcl_status_lbl):
+            return
+        self.manage_worker.start_create_rtcl(team_id, customer_id, location_id)
+
+    def _on_rtcl_created(self, success: bool, message: str) -> None:
+        self._show_manage_status(self.rtcl_status_lbl, message, error=not success)
+
+    def _on_manage_worker_error(self, message: str, trace: str) -> None:
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Critical)
+        box.setWindowTitle("Unexpected Error")
+        box.setText("An error occurred while processing the request.")
+        box.setInformativeText(message)
+        box.setDetailedText(trace)
+        box.setStandardButtons(QMessageBox.Ok)
+        box.exec()
+
+    # Mangage Tab Data Refresh
+    def _refresh_manage_lists(self) -> None:
+        if not self._cache:
+            return
+
+        self.rep_list.clear()
+        for name in sorted(self._cache.representatives):
+            self.rep_list.addItem(name.title())
+        self._reload_combo(self.member_rep_combo, self._cache.representatives)
+
+        self.team_list.clear()
+        for name in sorted(self._cache.rep_teams):
+            self.team_list.addItem(name.title())
+        self._reload_combo(self.member_team_combo, self._cache.rep_teams)
+        self._reload_combo(self.rtcl_team_combo, self._cache.rep_teams)
+
+        self._reload_combo(self.rtcl_customer_combo, self._cache.customers)
+
+        current_location = self.rtcl_location_combo.currentData()
+        self.rtcl_location_combo.blockSignals(True)
+        self.rtcl_location_combo.clear()
+        for (city, state), location_id in sorted(self._cache.locations.items()):
+            self.rtcl_location_combo.addItem(
+                f"{str(city).title()}, {str(state).upper()}", userData=location_id,
+            )
+        if current_location is not None:
+            idx = self.rtcl_location_combo.findData(current_location)
+            if idx >= 0:
+                self.rtcl_location_combo.setCurrentIndex(idx)
+        self.rtcl_location_combo.blockSignals(False)
+
+    def _reload_combo(self, combo: QComboBox, mapping: dict) -> None:
+        current = combo.currentData()
+        combo.blockSignals(True)
+        combo.clear()
+        for name in sorted(mapping):
+            display = name.title() if isinstance(name, str) else str(name)
+            combo.addItem(display, userData=mapping[name])
+        if current is not None:
+            idx = combo.findData(current)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+        combo.blockSignals(False)
+
+    def _show_manage_status(self, label: QLabel, text: str, *, error: bool) -> None:
+        label.setObjectName("errorLabel" if error else "successLabel")
+        label.style().unpolish(label)
+        label.style().polish(label)
+        label.setText(text)
+        label.setVisible(True)
 
     # Worker Setup
     def _create_worker(self) -> RepWorker:
@@ -682,6 +1099,8 @@ class RepPage(QWidget):
         self._cache = cache
         if self.worker:
             self.worker.cache = cache
+        self.manage_worker.cache = cache
+        self._refresh_manage_lists()
 
     def _on_worker_error(self, message: str, trace: str) -> None:
         self._lock_ui(locked=False)
