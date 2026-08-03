@@ -22,6 +22,8 @@ class DataCache:
         self.manufacturers: dict = {}
         self.representatives: dict = {}
         self.rep_teams: dict = {}
+        self.rtcl: set = {}
+        self.team_members: dict = {}
         self.refresh_all()
 
     def refresh_all(self) -> None:
@@ -36,6 +38,9 @@ class DataCache:
         self.manufacturers = self._factory.manufacturers.get_all_as_dict()
         self.customer_locations = self._factory.customer_locations.get_all_as_dict()
         self.representatives = self._factory.representatives.get_all_as_dict()
+        self.rep_teams = self._factory.rep_teams.get_all_as_dict()
+        self.team_members = self._factory.team_members.get_all_as_dict()
+        self.rtcl = self._factory.rtcl.get_all_as_dict()
 
     def refresh_locations(self) -> None:
         """Refresh location dict."""
@@ -72,3 +77,11 @@ class DataCache:
     def refresh_rep_teams(self) -> None:
         """Refresh rep teams dict."""
         self.rep_teams = self._factory.rep_teams.get_all_as_dict()
+
+    def refresh_rtcl(self) -> None:
+        """Refresh rtcl dict."""
+        self.rtcl = self._factory.rtcl.get_all_as_dict()
+
+    def refresh_team_members(self) -> None:
+        """Refresh team members dict."""
+        self.team_members = self._factory.team_members.get_all_as_dict()

@@ -224,7 +224,7 @@ class FileHandler:
                 self.dao.customer_locations.create(customer_location)
                 customer_location_list.append(customer_location)
 
-            rep_team_id = self.cache.representatives.get(customer_location)
+            rep_team_id = self.cache.rtcl.get(customer_location)
 
             # insert item
             if line_data["stockcode"] in self.cache.items:

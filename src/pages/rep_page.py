@@ -55,7 +55,7 @@ _COLUMN_HEADERS = [
 
 # Classifications for team member assignment
 CLASSIFICATIONS: list[tuple[str, str]] = [
-    ("heating,", "Heating"),
+    ("heating", "Heating"),
     ("plumbing", "Plumbing"),
 ]
 
@@ -343,7 +343,7 @@ class ManageWorker(QThread):
     def _create_rep(self, factory: DAOFactory) -> None:
         # TODO: backend - RepresentativeDAO.create() needs a duplicate check
         # (ON CONFLICT DO NOTHING currently returns None and will raise here).
-        rep = factory.representative.create(
+        rep = factory.representatives.create(
             Representative(representative_id=None, representative_name=self._rep_name),
         )
         if self.cache is not None:
@@ -646,7 +646,7 @@ class RepPage(QWidget):
         self.add_rep_btn = QPushButton("Add Representative")
         self.add_rep_btn.setCursor(Qt.PointingHandCursor)
         self.add_rep_btn.setMinimumHeight(40)
-        self.add_rep_btn.clicked.connect(self._handler_create_representative)
+        self.add_rep_btn.clicked.connect(self._handle_create_representative)
         row.addWidget(self.add_rep_btn)
 
         layout.addLayout(row)
@@ -961,9 +961,9 @@ class RepPage(QWidget):
         current_location = self.rtcl_location_combo.currentData()
         self.rtcl_location_combo.blockSignals(True)
         self.rtcl_location_combo.clear()
-        for (city, state), location_id in sorted(self._cache.locations.items()):
+        for (city, state), location_id in (self._cache.locations.items()):
             self.rtcl_location_combo.addItem(
-                f"{str(city).title()}, {str(state).upper()}", userData=location_id,
+                f"{str(city).title() if city else ""}, {str(state).upper() if state else ""}", userData=location_id,
             )
         if current_location is not None:
             idx = self.rtcl_location_combo.findData(current_location)
@@ -971,7 +971,7 @@ class RepPage(QWidget):
                 self.rtcl_location_combo.setCurrentIndex(idx)
         self.rtcl_location_combo.blockSignals(False)
 
-    def _reload_combo(self, combo: QComboBox, mapping: dict) -> None:
+    def _reload_combo(self, combo: QComboBox, mapping: dict | set) -> None:
         current = combo.currentData()
         combo.blockSignals(True)
         combo.clear()

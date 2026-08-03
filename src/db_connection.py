@@ -2,7 +2,7 @@
 import contextlib
 import json
 import sys
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
@@ -29,7 +29,7 @@ class DBConnector:
         self.item_list = {}
 
     @contextlib.contextmanager
-    def cursor(self) -> Iterator[psycopg2.extensions.cursor]:
+    def cursor(self) -> Generator[psycopg2.extensions.cursor]:
         """Provide a cursor for executing database operations.
 
         Opens a new cursor from the active connection and yields it
@@ -550,7 +550,7 @@ class CustomerAliasDAO(DAO):
             )
             return bool(cursor.fetchone())
 
-    def create_bulk(self, lines: list[CustomerAlias]) -> None:
+    def create_bulk(self, lines: list[CustomerAlias]) -> bool:
         """Insert list of CustomerAliases into database.
 
         Args:
@@ -571,6 +571,7 @@ class CustomerAliasDAO(DAO):
                 values,
                 page_size=500,
             )
+        return True
 
     def delete(self, alias: str) -> None:
         """Delete a customer alias from the database.
@@ -1420,14 +1421,12 @@ class RepresentativeDAO(DAO):
                 "(representative_name) "
                 "VALUES (%s) ON CONFLICT DO NOTHING "
                 "RETURNING representative_id",
-                (
-                    representative.representative_name
-                ),
+                (representative.representative_name,),
             )
             row = cursor.fetchone()
             if row:
                 return Representative(
-                    representative_id=cursor.fetchone()[0],
+                    representative_id=row[0],
                     representative_name=representative.representative_name,
                 )
             return None
@@ -1562,7 +1561,7 @@ class RepresentativeTeamsDAO(DAO):
                     "INSERT INTO representative_teams "
                     "(team_name) "
                     "VALUES (%s) ON CONFLICT DO NOTHING "
-                    "RETURNING representative_id",
+                    "RETURNING team_id",
                     (team.team_name,),
                 )
                 _id = cursor.fetchone()
@@ -1616,16 +1615,47 @@ class RepTeamCustomerLocationDAO(DAO):
         "SELECT "
         "team_id, "
         "customer_id, "
-        "location_id, "
+        "location_id "
         "FROM rep_team_customer_locations"
     )
 
-    def _from_row(self, row: tuple[Any, ...]) -> ReportLine:
+    def _from_row(self, row: tuple[Any, ...]) -> RepTeamCustomerLocation:
         return RepTeamCustomerLocation(
             row[0],
             row[1],
             row[2],
         )
+
+    def get_all_as_set(self) -> set[RepTeamCustomerLocation]:
+            """Retrieve all customer location pairs in the database.
+
+            Returns:
+                set[CustomerLocation]:
+                    A set containing all customer location pairs.
+
+            """
+            with self.connector.cursor() as cursor:
+                cursor.execute(f"{self._select}")
+                return {self._from_row(row) for row in cursor.fetchall()}
+
+    def get_all_as_dict(self) -> dict[CustomerLocation, int]:
+        """Retrieve all rtcl relations from the database.
+
+        Returns:
+            dict[CustomerLocation, int]:
+                A dict containing all rtcl relation pairs.
+
+        """
+        with self.connector.cursor() as cursor:
+            cursor.execute(f"{self._select}")
+            return {
+                CustomerLocation(
+                    customer_id=row[1],
+                    location_id=row[2],
+                ):
+                row[0]
+                for row in cursor.fetchall()
+            }
 
     def get_by_customer_location(
         self,
@@ -1819,7 +1849,7 @@ class TeamMemberDAO(DAO):
             cursor.execute(
                 "INSERT INTO team_members "
                 "(team_id, representative_id, rep_classification) "
-                "VALUES (%s, %s, %s)",
+                "VALUES (%s, %s, %s::classification)",
                 (team_id, rep_id, classification),
             )
 
@@ -1870,7 +1900,8 @@ class ReportLineDAO(DAO):
         "amt, "
         "transfer, "
         "location_id, "
-        "sale_date "
+        "sale_date, "
+        "rep_team "
         "FROM report_line"
     )
 
@@ -1886,6 +1917,7 @@ class ReportLineDAO(DAO):
             row[7],
             row[8],
             row[9],
+            row[10],
         )
 
     def get_by_id(self, report_line_id: int) -> ReportLine | None:
@@ -1983,6 +2015,7 @@ class ReportLineDAO(DAO):
             cursor.execute("INSERT INTO report_line "
                            "(report_id, "
                            "customer_id, "
+                           "customer_alias, "
                            "item_id, "
                            "quantity, "
                            "amt, "
@@ -2081,6 +2114,7 @@ class ReportLineDAO(DAO):
                 ln.transfer,
                 ln.location_id,
                 ln.sale_date,
+                ln.rep_team,
             )
             for ln in lines
         ]
@@ -2097,7 +2131,8 @@ class ReportLineDAO(DAO):
                 "amt, "
                 "transfer, "
                 "location_id, "
-                "sale_date) "
+                "sale_date, "
+                "team_id) "
                 "VALUES %s",
                 values,
                 page_size=500,
