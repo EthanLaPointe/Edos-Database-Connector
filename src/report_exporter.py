@@ -23,27 +23,29 @@ EXPORT_COLUMNS = [
     "amt",
     "quantity",
     "transfer",
+    "team_id",
     "team_name",
     "representative_name",
 ]
 
 _REPORT_QUERY = """
             select
-                m.manufacturer_name,
-                sr.report_year,
-                sr.report_month,
-                rl.customer_alias,
-                c.customer_name,
-                l.city,
-                l.state,
-                i.stockcode,
-                i.product_family,
-                i.product_description,
-                rl.amt,
-                rl.quantity,
-                rl.transfer,
-                rt.team_name,
-                rep.representative_name
+            m.manufacturer_name,
+            sr.report_year,
+            sr.report_month,
+            rl.customer_alias,
+            c.customer_name,
+            l.city,
+            l.state,
+            i.stockcode,
+            i.product_family,
+            i.product_description,
+            rl.amt,
+            rl.quantity,
+            rl.transfer,
+            rl.team_id,
+            rt.team_name,
+            rep.representative_name
             from report_line rl
             join sales_report sr
                 on rl.report_id = sr.report_id
@@ -65,7 +67,7 @@ _REPORT_QUERY = """
                 and tm.rep_classification = m.manufacturer_classification
             left join representatives rep
                 on rep.representative_id = tm.representative_id
-            where rl.report_id = %s
+            where rl.report_id = 2
             order by
                 c.customer_name,
                 l.city,
