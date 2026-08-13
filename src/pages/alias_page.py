@@ -1,4 +1,4 @@
-"""To Be Finished Later."""
+"""To Be Finished Later.""" # noqa: CPY001
 
 import csv
 from enum import Enum, auto

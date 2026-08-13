@@ -1,4 +1,4 @@
-"""Protocol definitions for type annotations."""
+"""Protocol definitions for type annotations.""" # noqa: CPY001
 from typing import Protocol
 
 

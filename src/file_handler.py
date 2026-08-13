@@ -2,7 +2,7 @@
 
 Used for the cleaning, validation, and insertion, of report files into the database.
 Also used for the reading, cleaning, validation, and insertion, of alias mapping files.
-"""
+""" # noqa: CPY001
 
 import re
 from decimal import Decimal
@@ -710,11 +710,11 @@ class FileHandler:
         for row in dataframe.itertuples(index=False):
             customer_id = self.cache.customers[row[1]]
             location_id = self.cache.locations[(row[2], row[3])]
+            cl = CustomerLocation(customer_id, location_id)
             team_id = self.cache.rep_teams[row[4]]
             rtcl = RepTeamCustomerLocation(
                 team_id=team_id,
-                customer_id=customer_id,
-                location_id=location_id,
+                customer_location=cl,
             )
             rtcl_list.append(rtcl)
             if row[5]:

@@ -1,4 +1,4 @@
-"""To be finished later."""
+"""To be finished later.""" # noqa: CPY001
 
 import traceback
 from functools import partial

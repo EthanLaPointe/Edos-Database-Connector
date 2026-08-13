@@ -1,4 +1,4 @@
-"""Contains implementation for ReportPage class and any related worker classes."""
+"""Contains implementation for ReportPage class and any related worker classes.""" # noqa: CPY001
 
 from collections import Counter
 from pathlib import Path

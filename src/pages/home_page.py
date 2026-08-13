@@ -1,4 +1,4 @@
-"""To be finished later."""
+"""To be finished later.""" # noqa: CPY001
 
 from pathlib import Path
 

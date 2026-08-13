@@ -1,6 +1,7 @@
-"""Contains implementation for RepPage class and any related worker classes."""
+"""Contains implementation for RepPage class and any related worker classes.""" # noqa: CPY001
 
 import traceback
+import typing
 from enum import Enum, auto
 from pathlib import Path
 from typing import ClassVar
@@ -14,6 +15,7 @@ from PySide6.QtCore import (
     QThread,
     Signal,
 )
+from PySide6.QtGui import QWheelEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -37,6 +39,7 @@ from pages.protocols import AppController
 from pages.sidebar import Sidebar
 from src.data_cache import DataCache
 from src.db_connection import (
+    CustomerLocation,
     DAOFactory,
     DBConnector,
     Representative,
@@ -58,6 +61,18 @@ CLASSIFICATIONS: list[tuple[str, str]] = [
     ("heating", "Heating"),
     ("plumbing", "Plumbing"),
 ]
+
+class NoPropagateListWidget(QListWidget):
+    """QListWidget that prevents wheel event propagation.
+
+    Class swallows wheel events instead of letting them reach a parent scroll area
+    when the list hits its scroll limit.
+    """
+
+    @typing.override
+    def wheelEvent(self, event: QWheelEvent) -> None:
+        super().wheelEvent(event)
+        event.accept()
 
 # Table Class
 class RepMappingModel(QAbstractTableModel):
@@ -276,7 +291,7 @@ class ManageWorker(QThread):
         emitted after CREATE_TEAM
     member_created(success, message):
         emitted after CREATE_MEMBER
-    rtcl_created(success, message):
+    rtcl_created(message, success):
         emitted after CREATE_RTCL
     members_loaded(members):
         emitted after LOAD_TEAM_MEMBERS
@@ -285,10 +300,10 @@ class ManageWorker(QThread):
 
     """
 
-    rep_created = Signal(bool, str)
-    team_created = Signal(bool, str)
-    member_created = Signal(bool, str)
-    rtcl_created = Signal(bool, str)
+    rep_created = Signal(str, bool)
+    team_created = Signal(str, bool)
+    member_created = Signal(str, bool)
+    rtcl_created = Signal(str, bool)
     members_loaded = Signal(list)
     error = Signal(str, str)
 
@@ -341,48 +356,80 @@ class ManageWorker(QThread):
 
     # Private Worker Tasks
     def _create_rep(self, factory: DAOFactory) -> None:
-        # TODO: backend - RepresentativeDAO.create() needs a duplicate check
-        # (ON CONFLICT DO NOTHING currently returns None and will raise here).
         rep = factory.representatives.create(
             Representative(representative_id=None, representative_name=self._rep_name),
         )
-        if self.cache is not None:
-            self.cache.refresh_representatives()
-        self.rep_created.emit(
-            True, f"Representative '{rep.representative_name}' added.",
-        )
+        success = bool(rep)
+        if success:
+            if self.cache is not None:
+                self.cache.refresh_representatives()
+            self.rep_created.emit(
+                f"Representative '{rep.representative_name}' added.",
+                success,
+            )
+        else:
+            self.rep_created.emit(
+                f"Representative '{self._rep_name}' already exists "
+                "or could not be added. ",
+                success,
+            )
 
     def _create_team(self, factory: DAOFactory) -> None:
-        # TODO: backend - RepresentativeTeamsDAO.create() needs a duplicate check.
         team = factory.rep_teams.create(
             RepresentativeTeam(team_id=None, team_name=self._team_name),
         )
+        success = bool(team)
         if self.cache is not None:
             self.cache.refresh_rep_teams()
-        if team is not None:
-            self.team_created.emit(True, f"Team '{team.team_name}' added.")
+        if success:
+            self.team_created.emit(f"Team '{team.team_name}' added.", success)
         else:
             self.team_created.emit(
-                False, f"'{self._team_name}' already exists or could not be added.",
+                f"'{self._team_name}' already exists or could not be added.",
+                success,
             )
 
     def _create_member(self, factory: DAOFactory) -> None:
-        factory.team_members.create(
+        team_member = factory.team_members.create(
             self._member_team_id,
             self._member_rep_id,
             self._member_classification,
         )
-        self.member_created.emit(True, "Representative assigned to team.")
+        success = bool(team_member)
+        if success:
+            self.member_created.emit("Representative assigned to team.", success)
+        else:
+            self.member_created.emit(
+                "Representative already assigned to that team or could not be added.",
+                success,
+            )
 
     def _create_rtcl(self, factory: DAOFactory) -> None:
-        factory.rtcl.create(
+        cl = factory.customer_locations.get(
+            self._rtcl_customer_id,
+            self._rtcl_location_id,
+        )
+        if cl is None:
+            cl = CustomerLocation(
+                self._rtcl_customer_id,
+                self._rtcl_location_id,
+            )
+            factory.customer_locations.create(cl)
+
+        rtcl = factory.rtcl.create(
             RepTeamCustomerLocation(
                 team_id=self._rtcl_team_id,
-                customer_id=self._rtcl_customer_id,
-                location_id=self._rtcl_location_id,
+                customer_location=cl,
             ),
         )
-        self.rtcl_created.emit(True, "Customer location assigned to team.")
+        success = bool(rtcl)
+        if success:
+            self.rtcl_created.emit("Customer location assigned to team.", success)
+        else:
+            self.rtcl_created.emit(
+                "Relationship already exists or could not be added.",
+                success,
+            )
 
     def _load_team_members(self, factory: DAOFactory) -> None:
         members = factory.team_members.get_by_team(self._member_team_id)
@@ -455,7 +502,7 @@ class RepPage(QWidget):
         self._build_ui()
 
     # UI Builder
-    def _build_ui(self) -> None:  # noqa: PLR0915
+    def _build_ui(self) -> None:
         """Build all UI elements and set spacing and sizing."""
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -660,7 +707,7 @@ class RepPage(QWidget):
         hint.setObjectName("hintLabel")
         layout.addWidget(hint)
 
-        self.rep_list = QListWidget()
+        self.rep_list = NoPropagateListWidget()
         self.rep_list.setMaximumHeight(140)
         layout.addWidget(self.rep_list)
 
@@ -701,7 +748,7 @@ class RepPage(QWidget):
         hint.setObjectName("hintLabel")
         layout.addWidget(hint)
 
-        self.team_list = QListWidget()
+        self.team_list = NoPropagateListWidget()
         self.team_list.setMaximumHeight(140)
         layout.addWidget(self.team_list)
 
@@ -761,7 +808,7 @@ class RepPage(QWidget):
         hint2.setObjectName("hintLabel")
         layout.addWidget(hint2)
 
-        self.team_member_list = QListWidget()
+        self.team_member_list = NoPropagateListWidget()
         self.team_member_list.setMaximumHeight(140)
         layout.addWidget(self.team_member_list)
 
@@ -844,11 +891,13 @@ class RepPage(QWidget):
             return
         self.manage_worker.start_create_representative(name.lower())
 
-    def _on_rep_created(self, success: bool, message: str) -> None:
-        self._show_manage_status(self.rep_status_lbl, message, error=not success)
+    def _on_rep_created(self, message: str, success: bool) -> None:  # noqa: FBT001
         if success:
+            self._show_manage_status(self.rep_status_lbl, message, error=False)
             self.rep_name_input.clear()
             self._refresh_manage_lists()
+        else:
+            self._show_manage_status(self.rep_status_lbl, message, error=True)
 
     # Manage Tab Handlers - Teams
     def _handle_create_team(self) -> None:
@@ -862,11 +911,13 @@ class RepPage(QWidget):
             return
         self.manage_worker.start_create_team(name.lower())
 
-    def _on_team_created(self, success: bool, message: str) -> None:
-        self._show_manage_status(self.team_status_lbl, message, error=not success)
+    def _on_team_created(self, message: str, success: bool) -> None:  # noqa: FBT001
         if success:
+            self._show_manage_status(self.team_status_lbl, message, error=False)
             self.team_name_input.clear()
             self._refresh_manage_lists()
+        else:
+            self._show_manage_status(self.team_status_lbl, message, error=True)
 
     # Manage Tab Handlers - Team Members
     def _on_member_team_changed(self) -> None:
@@ -889,13 +940,17 @@ class RepPage(QWidget):
         if self._manage_worker_busy(self.member_status_lbl):
             return
         self.manage_worker.start_create_member(team_id, rep_id, classification)
+        if team_id is not None and not self.manage_worker.isRunning():
+                    self.manage_worker.start_load_team_members(team_id)
 
-    def _on_member_created(self, success: bool, message: str) -> None:
-        self._show_manage_status(self.member_status_lbl, message, error=not success)
+    def _on_member_created(self, message: str, success: bool) -> None:  # noqa: FBT001
         if success:
+            self._show_manage_status(self.member_status_lbl, message, error=False)
             team_id = self.member_team_combo.currentData()
             if team_id is not None:
                 self.manage_worker.start_load_team_members(team_id)
+        else:
+            self._show_manage_status(self.member_status_lbl, message, error=True)
 
     def _on_members_loaded(self, members: list) -> None:
         self.team_member_list.clear()
@@ -927,8 +982,11 @@ class RepPage(QWidget):
             return
         self.manage_worker.start_create_rtcl(team_id, customer_id, location_id)
 
-    def _on_rtcl_created(self, success: bool, message: str) -> None:
-        self._show_manage_status(self.rtcl_status_lbl, message, error=not success)
+    def _on_rtcl_created(self, message: str, success: bool) -> None:  # noqa: FBT001
+        if success:
+            self._show_manage_status(self.rtcl_status_lbl, message, error=False)
+        else:
+            self._show_manage_status(self.rtcl_status_lbl, message, error=True)
 
     def _on_manage_worker_error(self, message: str, trace: str) -> None:
         box = QMessageBox(self)
@@ -959,21 +1017,23 @@ class RepPage(QWidget):
         self._reload_combo(self.rtcl_customer_combo, self._cache.customers)
 
         current_location = self.rtcl_location_combo.currentData()
-        self.rtcl_location_combo.blockSignals(True)
+        self.rtcl_location_combo.blockSignals(True)  # noqa: FBT003
         self.rtcl_location_combo.clear()
         for (city, state), location_id in (self._cache.locations.items()):
             self.rtcl_location_combo.addItem(
-                f"{str(city).title() if city else ""}, {str(state).upper() if state else ""}", userData=location_id,
+                f"{str(city).title() if city else ""}, "
+                f"{str(state).upper() if state else ""}",
+                userData=location_id,
             )
         if current_location is not None:
             idx = self.rtcl_location_combo.findData(current_location)
             if idx >= 0:
                 self.rtcl_location_combo.setCurrentIndex(idx)
-        self.rtcl_location_combo.blockSignals(False)
+        self.rtcl_location_combo.blockSignals(True)  # noqa: FBT003
 
     def _reload_combo(self, combo: QComboBox, mapping: dict | set) -> None:
         current = combo.currentData()
-        combo.blockSignals(True)
+        combo.blockSignals(True)  # noqa: FBT003
         combo.clear()
         for name in sorted(mapping):
             display = name.title() if isinstance(name, str) else str(name)
@@ -982,7 +1042,7 @@ class RepPage(QWidget):
             idx = combo.findData(current)
             if idx >= 0:
                 combo.setCurrentIndex(idx)
-        combo.blockSignals(False)
+        combo.blockSignals(False)  # noqa: FBT003
 
     def _show_manage_status(self, label: QLabel, text: str, *, error: bool) -> None:
         label.setObjectName("errorLabel" if error else "successLabel")

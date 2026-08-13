@@ -1,4 +1,4 @@
-"""_summary_."""
+"""_summary_.""" # noqa: CPY001
 import os
 import sys
 from pathlib import Path

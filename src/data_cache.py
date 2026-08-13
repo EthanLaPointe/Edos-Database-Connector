@@ -1,4 +1,4 @@
-"""To be finished later."""
+"""To be finished later.""" # noqa: CPY001
 from src.db_connection import DAOFactory
 
 

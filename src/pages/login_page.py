@@ -1,4 +1,4 @@
-"""To be finished later."""
+"""To be finished later.""" # noqa: CPY001
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (

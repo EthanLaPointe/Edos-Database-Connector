@@ -1,4 +1,4 @@
-"""To be finished later."""
+"""To be finished later.""" # noqa: CPY001
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QMainWindow, QStackedWidget, QWidget
 
@@ -34,8 +34,8 @@ class App(QMainWindow):
         """
         super().__init__()
         self.setWindowTitle("Edos Database Connector")
-        self.setMinimumSize(800, 600)
-        self.resize(1000, 700)
+        self.setMinimumSize(1000, 700)
+        self.resize(1100, 700)
 
         # Shared State
         self.current_user: str | None = None

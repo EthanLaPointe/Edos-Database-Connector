@@ -1,4 +1,4 @@
-"""To be finished later."""
+"""To be finished later.""" # noqa: CPY001
 import contextlib
 import json
 import sys
@@ -218,8 +218,7 @@ class RepTeamCustomerLocation:
     """Dataclass to hold customer locations per rep team."""
 
     team_id: int
-    customer_id: int
-    location_id: int
+    customer_location: CustomerLocation
 
 @dataclass(frozen=True)
 class TeamMember:
@@ -559,7 +558,7 @@ class CustomerAliasDAO(DAO):
 
         """
         if not lines:
-            return
+            return False
 
         values = [(ln.alias, ln.customer_id) for ln in lines]
 
@@ -604,7 +603,7 @@ class LocationDAO(DAO):
 
         """
         with self.connector.cursor() as cursor:
-            cursor.execute(f"{self._select} ORDER BY {self._pk}")
+            cursor.execute(f"{self._select} ORDER BY state, city")
             return {(x[1], x[2]): x[0] for x in cursor.fetchall()}
 
     def get_page_as_dict(
@@ -1622,8 +1621,7 @@ class RepTeamCustomerLocationDAO(DAO):
     def _from_row(self, row: tuple[Any, ...]) -> RepTeamCustomerLocation:
         return RepTeamCustomerLocation(
             row[0],
-            row[1],
-            row[2],
+            CustomerLocation(row[1], row[2]),
         )
 
     def get_all_as_set(self) -> set[RepTeamCustomerLocation]:
@@ -1705,30 +1703,51 @@ class RepTeamCustomerLocationDAO(DAO):
             )
             return {self._from_row(x) for x in cursor.fetchall()}
 
-    def delete(self, customer_location: CustomerLocation) -> None:
+    def delete(self, rtcl: RepTeamCustomerLocation) -> None:
         """Delete a rep team customer location from the database.
 
         Args:
-            customer_location (CustomerLocation):
-                The location of the rep team relation to delete.
+            rtcl (RepTeamCustomerLocation):
+                The rtcl to delete from the database.
 
         """
+        with self.connector.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM rep_team_customer_locations "
+                "WHERE (team_id = %s, customer_id = %s, location_id = %s) ",
+                (
+                    rtcl.team_id,
+                    rtcl.customer_location.customer_id,
+                    rtcl.customer_location.location_id,
+                ),
+            )
 
-    def create(self, rtcl: RepTeamCustomerLocation) -> None:
+    def create(self, rtcl: RepTeamCustomerLocation) -> RepTeamCustomerLocation | None:
         """Insert a new customer location rep team relationship.
 
         Args:
             rtcl (RepTeamCustomerLocation):
                 The customer location and team ID to be added.
 
+        Returns:
+            RepTeamCustomerLocation | None:
+                The inserted relationship or None if it already existed.
+
         """
         with self.connector.cursor() as cursor:
             cursor.execute(
                 "INSERT INTO rep_team_customer_locations "
                 "(team_id, customer_id, location_id) "
-                "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
-                (rtcl.team_id, rtcl.customer_id, rtcl.location_id),
+                "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING "
+                "RETURNING team_id, customer_id, location_id",
+                (
+                    rtcl.team_id,
+                    rtcl.customer_location.customer_id,
+                    rtcl.customer_location.location_id,
+                ),
             )
+            row = cursor.fetchone()
+            return self._from_row(row) if row else None
 
     def create_bulk(self, lines: list[RepTeamCustomerLocation]) -> None:
         """Insert a list of rep team customer locations into the database.
@@ -1741,7 +1760,11 @@ class RepTeamCustomerLocationDAO(DAO):
         if not lines:
             return lines
 
-        values = [(ln.team_id, ln.customer_id, ln.location_id) for ln in lines]
+        values = [(
+            ln.team_id,
+            ln.customer_location.customer_id,
+            ln.customer_location.location_id,
+        ) for ln in lines]
 
         with self.connector.cursor() as cursor:
             psycopg2.extras.execute_values(
@@ -1833,7 +1856,12 @@ class TeamMemberDAO(DAO):
                 (team_id, classification),
             )
 
-    def create(self, team_id: int, rep_id: int, classification: Classification) -> None:
+    def create(
+        self,
+        team_id: int,
+        rep_id: int,
+        classification: Classification,
+    )-> TeamMember | None:
         """Create a new team member relationship.
 
         Args:
@@ -1844,14 +1872,22 @@ class TeamMemberDAO(DAO):
             classification (Classification):
                 The classification of the representative to add.
 
+        Returns:
+            TeamMember | None:
+                The created TeamMember or None if it already existed.
+
         """
         with self.connector.cursor() as cursor:
             cursor.execute(
                 "INSERT INTO team_members "
                 "(team_id, representative_id, rep_classification) "
-                "VALUES (%s, %s, %s::classification)",
+                "VALUES (%s, %s, %s::classification) "
+                "ON CONFLICT DO NOTHING "
+                "RETURNING team_id, representative_id, rep_classification",
                 (team_id, rep_id, classification),
             )
+            row = cursor.fetchone()
+            return self._from_row(row) if row else None
 
     def create_bulk(self, lines: list[TeamMember]) -> None:
         """Insert a list of team members into the database.
@@ -2033,63 +2069,6 @@ class ReportLineDAO(DAO):
                             line.location_id,
                             line.sale_date,
                         ),
-            )
-
-    def direct_insert(  # noqa: PLR0913
-        self,
-        report_id: int,
-        customer_id: int,
-        item_id: int,
-        location_id: int,
-        amount: float,
-        saledate: str,
-        quantity: int,
-        transfer: str,
-    ) -> None:
-        """Insert a single report line using raw data.
-
-        Args:
-            report_id (int):
-                ID of the parent report.
-            customer_id (int):
-                ID of the customer in the line.
-            item_id (int):
-                ID of the item in the line.
-            location_id (int):
-                ID of the location in the line.
-            amount (float):
-                The amount value of the line.
-            saledate (str):
-                The sale date of the line.
-            quantity (int):
-                The item quantity of the line.
-            transfer (str):
-                The transfer type of the line.
-
-        """
-        with self.connector.cursor() as cursor:
-            cursor.execute(
-                "insert into report_line "
-                "(report_id, "
-                "customer_alias, "
-                "customer_id, "
-                "item_id, "
-                "location_id, "
-                "amt, "
-                "sale_date, "
-                "quantity, "
-                "transfer) "
-                "values (%s, %s, %s, %s, %s, %s, %s, %s, %s);",
-                (
-                    report_id,
-                    customer_id,
-                    item_id,
-                    location_id,
-                    amount,
-                    saledate,
-                    quantity,
-                    transfer,
-                ),
             )
 
     def create_bulk(self, lines: list[ReportLine]) -> None:
