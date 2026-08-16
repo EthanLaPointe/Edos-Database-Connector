@@ -1714,7 +1714,7 @@ class RepTeamCustomerLocationDAO(DAO):
         with self.connector.cursor() as cursor:
             cursor.execute(
                 "DELETE FROM rep_team_customer_locations "
-                "WHERE (team_id = %s, customer_id = %s, location_id = %s) ",
+                "WHERE team_id = %s AND customer_id = %s AND location_id = %s",
                 (
                     rtcl.team_id,
                     rtcl.customer_location.customer_id,

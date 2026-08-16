@@ -271,6 +271,7 @@ class _ManageTask(Enum):
     CREATE_TEAM = auto()
     CREATE_MEMBER = auto()
     CREATE_RTCL = auto()
+    DELETE_RTCL = auto()
     LOAD_TEAM_MEMBERS = auto()
 
 class ManageWorker(QThread):
@@ -304,6 +305,7 @@ class ManageWorker(QThread):
     team_created = Signal(str, bool)
     member_created = Signal(str, bool)
     rtcl_created = Signal(str, bool)
+    rtcl_deleted = Signal(str, bool)
     members_loaded = Signal(list)
     error = Signal(str, str)
 
@@ -345,6 +347,8 @@ class ManageWorker(QThread):
                     self._create_member(factory)
                 case _ManageTask.CREATE_RTCL:
                     self._create_rtcl(factory)
+                case _ManageTask.DELETE_RTCL:
+                    self._delete_rtcl(factory)
                 case _ManageTask.LOAD_TEAM_MEMBERS:
                     self._load_team_members(factory)
 
@@ -431,6 +435,19 @@ class ManageWorker(QThread):
                 success,
             )
 
+    def _delete_rtcl(self, factory: DAOFactory) -> None:
+        cl = CustomerLocation(
+            self._rtcl_customer_id,
+            self._rtcl_location_id,
+        )
+        factory.rtcl.delete(
+            RepTeamCustomerLocation(
+                team_id=self._rtcl_team_id,
+                customer_location=cl,
+            ),
+        )
+        self.rtcl_deleted.emit("Team-customer location relationship removed.", True)  # noqa: FBT003
+
     def _load_team_members(self, factory: DAOFactory) -> None:
         members = factory.team_members.get_by_team(self._member_team_id)
         self.members_loaded.emit(list(members))
@@ -466,6 +483,16 @@ class ManageWorker(QThread):
         self._rtcl_customer_id = customer_id
         self._rtcl_location_id = location_id
         self._task = _ManageTask.CREATE_RTCL
+        self.start()
+
+    def start_delete_rtcl(
+        self, team_id: int, customer_id: int, location_id: int,
+    ) -> None:
+        """Remove a team's link to a customer location. Emits rtcl_deleted."""
+        self._rtcl_team_id = team_id
+        self._rtcl_customer_id = customer_id
+        self._rtcl_location_id = location_id
+        self._task = _ManageTask.DELETE_RTCL
         self.start()
 
     def start_load_team_members(self, team_id: int) -> None:
@@ -854,6 +881,13 @@ class RepPage(QWidget):
         self.add_rtcl_btn.clicked.connect(self._handle_create_rtcl)
         layout.addWidget(self.add_rtcl_btn)
 
+        self.delete_rtcl_btn = QPushButton("Remove Team from Customer Location")
+        self.delete_rtcl_btn.setCursor(Qt.PointingHandCursor)
+        self.delete_rtcl_btn.setMinimumHeight(40)
+        self.delete_rtcl_btn.setObjectName("dangerButton")
+        self.delete_rtcl_btn.clicked.connect(self._handle_delete_rtcl)
+        layout.addWidget(self.delete_rtcl_btn)
+
         self.rtcl_status_lbl = QLabel("")
         self.rtcl_status_lbl.setWordWrap(True)
         self.rtcl_status_lbl.setVisible(False)
@@ -867,6 +901,7 @@ class RepPage(QWidget):
         self.manage_worker.team_created.connect(self._on_team_created)
         self.manage_worker.member_created.connect(self._on_member_created)
         self.manage_worker.rtcl_created.connect(self._on_rtcl_created)
+        self.manage_worker.rtcl_deleted.connect(self._on_rtcl_deleted)
         self.manage_worker.members_loaded.connect(self._on_members_loaded)
         self.manage_worker.error.connect(self._on_manage_worker_error)
 
@@ -987,6 +1022,34 @@ class RepPage(QWidget):
             self._show_manage_status(self.rtcl_status_lbl, message, error=False)
         else:
             self._show_manage_status(self.rtcl_status_lbl, message, error=True)
+
+    def _handle_delete_rtcl(self) -> None:
+        team_id = self.rtcl_team_combo.currentData()
+        customer_id = self.rtcl_customer_combo.currentData()
+        location_id = self.rtcl_location_combo.currentData()
+        if team_id is None or customer_id is None or location_id is None:
+            self._show_manage_status(
+                self.rtcl_status_lbl,
+                "Select a team, customer, and location.",
+                error=True,
+            )
+            return
+        if self._manage_worker_busy(self.rtcl_status_lbl):
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Remove Relationship",
+            "Remove this team's link to the selected customer location?",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        self.manage_worker.start_delete_rtcl(team_id, customer_id, location_id)
+
+    def _on_rtcl_deleted(self, message: str, success: bool) -> None:  # noqa: FBT001
+        self._show_manage_status(self.rtcl_status_lbl, message, error=not success)
 
     def _on_manage_worker_error(self, message: str, trace: str) -> None:
         box = QMessageBox(self)
